@@ -1,6 +1,7 @@
-import { db, iniciar, insertar, actualizar, borrar, entrar, salir, exportarJSON, importarJSON, reiniciarDemo, guardarPrivado } from './db.js';
+import { db, iniciar, insertar, actualizar, actualizarVarios, borrar, entrar, salir, exportarJSON, importarJSON, reiniciarDemo, guardarPrivado, tokenDe } from './db.js';
 import { vistaPerfil, vistaCredenciales, estadoPagos, suspensionActiva, folioTxt } from './credenciales.js';
-import { todosContraTodos, unirGrupos, calendarizar } from './roundrobin.js';
+import { unirGrupos, calendarizar, enfrentamientos, acomodarEnJornadas, equilibrarLocalia } from './roundrobin.js';
+const claveP = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 import { tablaPosiciones, tablaGoleo, tablaDisciplina } from './stats.js';
 import { NOMBRE_LIGA } from './config.js';
 import { revisarJugador, fechaDeCurp } from './validar.js';
@@ -18,6 +19,8 @@ const st = {
   jugadorEditando: null,  // jugador en edición
   pagosAbierto: null,     // jugador con pagos/suspensiones abiertos
   credTodos: false,       // credenciales: incluir sin registro pagado
+  cap: null,              // captura de resultado en curso
+  pagosEquipo: null,      // equipo con pagos (fianza) abiertos
   vistaPrevia: null,      // partidos generados sin guardar
 };
 const guardarPref = () => { try { localStorage.setItem(PREF, JSON.stringify({ torneoId: st.torneoId })); } catch { } };
@@ -99,7 +102,6 @@ function render() {
     return;
   }
   $app.innerHTML = r === 'admin' ? vistaAdmin() : r === 'inicio' ? vistaInicio() : vistaPublica();
-  window.scrollTo?.(0, 0);
 }
 
 function selectorTorneo() {
@@ -187,7 +189,7 @@ function filaPartido(p, eq) {
 }
 
 function pubCalendario(t) {
-  const ps = partidosDe(t.id);
+  const ps = partidosDe(t.id).filter(p => p.estado !== 'borrador');
   if (!ps.length) return `<div class="card vacio">Aún no hay jornadas programadas.</div>`;
   const eq = mapa(equiposDe(t.id));
   const porJ = new Map();
@@ -262,14 +264,21 @@ function vistaAdmin() {
       <button class="btn" type="submit">Entrar</button></form></div>`;
   }
   const t = torneo();
-  const cab = `<div class="fila entre"><h1>Administrar${t ? ': ' + esc(t.nombre) : ''}</h1><div class="fila">${selectorTorneo()}
+  const ROLES = { admin: 'Administrador', finanzas: 'Finanzas', captura: 'Captura de resultados' };
+  const cab = `<div class="fila entre"><h1>Administrar${t ? ': ' + esc(t.nombre) : ''} <span class="badge">${ROLES[db.rol] || ''}</span></h1><div class="fila">${selectorTorneo()}
     ${db.modo === 'supabase' ? `<button class="btn sec chico" data-act="salir">Cerrar sesión</button>` : ''}</div></div>`;
-  const lista = t
-    ? [['resultados', 'Resultados'], ['equipos', 'Equipos y jugadores'], ['generar', 'Generar jornadas'], ['torneos', 'Torneos'], ['respaldo', 'Respaldo']]
-    : [['torneos', 'Torneos'], ['respaldo', 'Respaldo']];
-  if (!lista.some(([id]) => id === st.tabAdmin)) st.tabAdmin = 'torneos';
+  const porRol = {
+    admin: t ? [['resultados', 'Capturar juegos'], ['equipos', 'Equipos y jugadores'], ['generar', 'Generar jornadas'], ['torneos', 'Torneos'], ['respaldo', 'Respaldo']]
+      : [['torneos', 'Torneos'], ['respaldo', 'Respaldo']],
+    captura: t ? [['resultados', 'Capturar juegos']] : [],
+    finanzas: t ? [['equipos', 'Equipos y jugadores']] : [],
+  };
+  const lista = porRol[db.rol] || [];
+  if (!lista.length) return cab + `<div class="card vacio">Todavía no hay torneos.</div>`;
+  if (!lista.some(([id]) => id === st.tabAdmin)) st.tabAdmin = lista[0][0];
   const cuerpo = { resultados: admResultados, equipos: admEquipos, generar: admGenerar, torneos: admTorneos, respaldo: admRespaldo }[st.tabAdmin](t);
-  const aviso = db.faltaMigracion ? `<div class="card" style="border-color:#f5c518"><b>Falta un paso en Supabase:</b> para usar credenciales, pagos y suspensiones corre una vez el archivo <code>supabase/migracion-002-credenciales.sql</code> en Supabase &gt; SQL Editor.</div>` : '';
+  const avisoRoles = db.faltaRoles && db.rol === 'admin' ? `<div class="card" style="border-color:#f5c518"><b>Falta un paso en Supabase:</b> para los usuarios de finanzas y captura, y las jornadas en borrador, corre <code>supabase/migracion-003-roles-borrador.sql</code>.</div>` : '';
+  const aviso = avisoRoles + (db.faltaMigracion ? `<div class="card" style="border-color:#f5c518"><b>Falta un paso en Supabase:</b> para usar credenciales, pagos y suspensiones corre una vez el archivo <code>supabase/migracion-002-credenciales.sql</code> en Supabase &gt; SQL Editor.</div>` : '');
   return cab + aviso + tabs(lista, st.tabAdmin, 'tabAdmin') + cuerpo;
 }
 
@@ -307,21 +316,27 @@ function admEquipos(t) {
   const tarjetas = eqs.map(e => {
     const abierto = st.equipoAbierto === e.id;
     const js = jugadoresDe(e.id);
+    const esAdm = db.rol === 'admin';
+    const botones = `<button class="btn sec chico" type="button" data-act="plantilla" data-id="${e.id}">${abierto ? 'Ocultar' : 'Ver'} jugadores (${js.length})</button>
+      ${db.faltaMigracion ? '' : `<button class="btn sec chico" type="button" data-act="pagos-equipo" data-id="${e.id}">Fianza y pagos del equipo</button>
+      <a class="btn sec chico" href="#/credenciales/${e.id}">🪪 Credenciales</a>`}`;
     return `<div class="card">
-      <form data-form="equipo" data-id="${e.id}"><div class="form-grid">
+      ${esAdm ? '' : `<div class="fila entre"><h3 style="margin:0">${esc(e.nombre)}</h3><div class="fila">${botones}</div></div>`}
+      ${db.faltaMigracion ? '' : resumenEquipo(e)}
+      ${st.pagosEquipo === e.id ? panelPagosEquipo(e) : ''}
+      ${!esAdm ? '' : `<form data-form="equipo" data-id="${e.id}"><div class="form-grid">
         <div class="campo"><label>Equipo</label><input name="nombre" required value="${esc(e.nombre)}"></div>
         <div class="campo"><label>Grupo (opcional)</label><input name="grupo" value="${esc(e.grupo || '')}" placeholder="A, B…"></div>
         <div class="campo"><label>Delegado</label><input name="delegado" value="${esc(e.delegado || '')}"></div>
         <div class="campo"><label>Teléfono</label><input name="telefono" value="${esc(e.telefono || '')}"></div>
       </div><div class="fila"><button class="btn chico" type="submit">Guardar</button>
-      <button class="btn sec chico" type="button" data-act="plantilla" data-id="${e.id}">${abierto ? 'Ocultar' : 'Ver'} jugadores (${js.length})</button>
-      <a class="btn sec chico" href="#/credenciales/${e.id}">🪪 Credenciales</a>
-      <button class="btn peligro chico" type="button" data-act="borrar-equipo" data-id="${e.id}">Borrar equipo</button></div></form>
+      ${botones}
+      <button class="btn peligro chico" type="button" data-act="borrar-equipo" data-id="${e.id}">Borrar equipo</button></div></form>`}
       ${abierto ? `<h3>Jugadores</h3>
         ${js.length ? `<div class="tabla-wrap"><table><thead><tr><th>Núm.</th><th class="izq">Nombre</th><th class="izq">CURP (privado)</th><th>Nacimiento (privado)</th><th class="izq">Revisión</th><th class="izq">Credencial y pagos</th><th>Activo</th><th></th></tr></thead><tbody>
         ${js.map(j => filaJugador(j, priv.get(j.id) || {}, t)).join('')}
         </tbody></table></div>` : '<p class="muted">Sin jugadores todavía.</p>'}
-        <form data-form="jugador" data-equipo="${e.id}" style="margin-top:10px"><div class="form-grid">
+        ${!esAdm ? '' : `<form data-form="jugador" data-equipo="${e.id}" style="margin-top:10px"><div class="form-grid">
           <div class="campo"><label>Nombre completo</label><input name="nombre" required></div>
           <div class="campo"><label>Número</label><input name="numero" type="number" min="0"></div>
           <div class="campo"><label>CURP (privado)</label><input name="curp" maxlength="18" style="text-transform:uppercase"></div>
@@ -330,18 +345,48 @@ function admEquipos(t) {
         <form data-form="jugadores-lote" data-equipo="${e.id}" style="margin-top:10px">
           <label>Agregar varios a la vez: uno por renglón, "número, nombre" (el número es opcional)</label>
           <textarea name="lista" rows="3" placeholder="10, Juan Pérez López&#10;7, Luis García"></textarea>
-          <button class="btn sec chico" type="submit" style="margin-top:6px">Agregar lista</button></form>` : ''}
+          <button class="btn sec chico" type="submit" style="margin-top:6px">Agregar lista</button></form>`}` : ''}
     </div>`;
   }).join('');
-  return `<div class="card"><h2 style="margin-top:0">Nuevo equipo</h2>
+  return `${db.rol !== 'admin' ? '' : `<div class="card"><h2 style="margin-top:0">Nuevo equipo</h2>
     <form data-form="equipo-nuevo"><div class="form-grid">
       <div class="campo"><label>Nombre del equipo</label><input name="nombre" required></div>
       <div class="campo"><label>Grupo (opcional)</label><input name="grupo" placeholder="A, B…"></div>
       <div class="campo"><label>Delegado</label><input name="delegado"></div>
       <div class="campo"><label>Teléfono</label><input name="telefono"></div>
-    </div><button class="btn" type="submit">Agregar equipo</button></form></div>
+    </div><button class="btn" type="submit">Agregar equipo</button></form></div>`}
     ${resumenRevision(t, eqs, priv)}
     <p class="muted">${eqs.length} equipos. La CURP y la fecha de nacimiento solo las ve el administrador; nunca aparecen en la página pública.</p>${tarjetas}`;
+}
+
+function resumenEquipo(e) {
+  const pg = D().pagos.filter(g => g.equipo_id === e.id && !g.jugador_id);
+  const fz = pg.filter(g => g.concepto === 'fianza');
+  const fianza = !fz.length ? '<span class="muted">sin registrar</span>'
+    : fz.every(g => g.pagado) ? `<b style="color:var(--verde)">$${fz.reduce((a, g) => a + Number(g.monto), 0)} pagada</b>`
+    : `<b style="color:#ffd166">$${fz.filter(g => !g.pagado).reduce((a, g) => a + Number(g.monto), 0)} pendiente</b>`;
+  const debeEq = pg.filter(g => !g.pagado).reduce((a, g) => a + Number(g.monto), 0);
+  const ids = new Set(jugadoresDe(e.id).map(j => j.id));
+  const debeJug = D().pagos.filter(g => ids.has(g.jugador_id) && !g.pagado).reduce((a, g) => a + Number(g.monto), 0);
+  const sinReg = jugadoresDe(e.id).filter(j => j.activo !== false && !estadoPagos(j).registro).length;
+  return `<div class="fila" style="gap:14px;font-size:13px;margin:6px 0 8px">
+    <span>Fianza: ${fianza}</span><span>Adeudo del equipo: <b>${debeEq ? '$' + debeEq : 'ninguno'}</b></span>
+    <span>Adeudo de jugadores: <b>${debeJug ? '$' + debeJug : 'ninguno'}</b></span><span>Sin registro pagado: <b>${sinReg}</b></span></div>`;
+}
+
+function panelPagosEquipo(e) {
+  const pg = D().pagos.filter(g => g.equipo_id === e.id && !g.jugador_id).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+  return `<div class="card" style="margin:6px 0 10px"><h3 style="margin-top:0">Fianza y pagos de ${esc(e.nombre)}</h3>
+    ${pg.length ? `<table><thead><tr><th class="izq">Concepto</th><th>Monto</th><th>Fecha</th><th>Pagado</th><th class="izq">Notas</th><th></th></tr></thead><tbody>
+      ${pg.map(g => `<tr><td class="izq">${CONCEPTOS[g.concepto] || g.concepto}</td><td>$${g.monto}</td><td>${esc(g.fecha || '')}</td>
+        <td><input type="checkbox" data-act="pago-pagado" data-id="${g.id}" ${g.pagado ? 'checked' : ''}></td><td class="izq">${esc(g.notas || '')}</td>
+        <td><button class="btn peligro chico" data-act="borrar-pago" data-id="${g.id}">x</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">Sin cargos del equipo.</p>'}
+    <form data-form="pago-equipo" data-equipo="${e.id}" style="margin-top:8px"><div class="form-grid">
+      <div class="campo"><label>Concepto</label><select name="concepto">${['fianza', 'inscripcion', 'arbitraje', 'otro'].map(k => `<option value="${k}">${CONCEPTOS[k]}</option>`).join('')}</select></div>
+      <div class="campo"><label>Monto ($)</label><input name="monto" type="number" min="0" required></div>
+      <div class="campo"><label>Notas</label><input name="notas" placeholder="Ej. fianza temporada 2026-27"></div>
+      <div class="campo"><label style="display:flex;gap:5px;align-items:center"><input type="checkbox" name="pagado"> Ya pagado</label><button class="btn chico" type="submit">Agregar cargo</button></div>
+    </div></form></div>`;
 }
 
 function filaJugador(j, p, t) {
@@ -360,9 +405,9 @@ function filaJugador(j, p, t) {
   return `<tr><td>${j.numero ?? ''}</td><td class="izq">${esc(j.nombre)}</td><td class="izq">${esc(p.curp || '')}</td><td>${esc(p.fecha_nac || '')}</td>
     <td class="izq" style="white-space:normal;font-size:12px;${avisos.length ? 'color:var(--rojo)' : 'color:var(--verde)'}">${avisos.length ? avisos.map(esc).join('<br>') : '✓ OK'}</td>
     <td class="izq">${celdaCredencial(j)}</td>
-    <td><input type="checkbox" data-act="activo-jugador" data-id="${j.id}" ${j.activo !== false ? 'checked' : ''}></td>
-    <td class="fila" style="flex-wrap:nowrap"><button class="btn sec chico" data-act="editar-jugador" data-id="${j.id}">Editar</button>
-    <button class="btn peligro chico" data-act="borrar-jugador" data-id="${j.id}">Quitar</button></td></tr>
+    <td><input type="checkbox" data-act="activo-jugador" data-id="${j.id}" ${j.activo !== false ? 'checked' : ''} ${db.rol === 'admin' ? '' : 'disabled'}></td>
+    <td class="fila" style="flex-wrap:nowrap">${db.rol === 'admin' ? `<button class="btn sec chico" data-act="editar-jugador" data-id="${j.id}">Editar</button>
+    <button class="btn peligro chico" data-act="borrar-jugador" data-id="${j.id}">Quitar</button>` : ''}</td></tr>
     ${st.pagosAbierto === j.id ? `<tr><td colspan="8" class="izq" style="white-space:normal">${panelPagos(j, t)}</td></tr>` : ''}`;
 }
 
@@ -378,7 +423,7 @@ function celdaCredencial(j) {
       <a class="btn sec chico" href="#/credenciales/j/${j.id}">Imprimir</a></div></div>`;
 }
 
-const CONCEPTOS = { registro: 'Registro', inscripcion: 'Inscripción', arbitraje: 'Arbitraje', multa: 'Multa', otro: 'Otro' };
+const CONCEPTOS = { registro: 'Registro', inscripcion: 'Inscripción', arbitraje: 'Arbitraje', multa: 'Multa', fianza: 'Fianza', otro: 'Otro' };
 function panelPagos(j, t) {
   const pg = D().pagos.filter(g => g.jugador_id === j.id).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
   const ss = D().suspensiones.filter(x => x.jugador_id === j.id);
@@ -419,41 +464,57 @@ function resumenRevision(t, eqs, priv) {
 }
 
 // ----- Generar jornadas -----
+function siguienteLunes(desdeISO) {
+  const d = desdeISO ? new Date(desdeISO + 'T12:00:00') : new Date();
+  d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function admGenerar(t) {
   const eqs = equiposDe(t.id);
   const ps = partidosDe(t.id);
-  const pendientes = ps.filter(p => p.estado !== 'jugado').length;
+  const publicados = ps.filter(p => p.estado !== 'borrador');
+  const borradores = ps.filter(p => p.estado === 'borrador');
+  const cuenta = enfrentamientos(ps);
+  let faltanIda = 0;
+  for (let i = 0; i < eqs.length; i++) for (let k = i + 1; k < eqs.length; k++) if (!cuenta.get(claveP(eqs[i].id, eqs[k].id))) faltanIda++;
   const maxJ = Math.max(0, ...ps.map(p => p.jornada));
+  const ultimaFecha = ps.map(p => p.fecha).filter(Boolean).sort().pop();
   const gs = grupos(eqs);
   const eq = mapa(eqs);
-  const prev = st.vistaPrevia;
-  let htmlPrev = '';
-  if (prev) {
-    const porJ = new Map();
-    prev.forEach(p => { if (!porJ.has(p.jornada)) porJ.set(p.jornada, []); porJ.get(p.jornada).push(p); });
-    const sinHorario = prev.filter(p => !p.fecha).length;
-    htmlPrev = `<div class="card"><div class="fila entre"><h2 style="margin:0">Vista previa: ${porJ.size} jornadas, ${prev.length} partidos</h2>
-      <div class="fila"><button class="btn" data-act="guardar-jornadas">Guardar en el calendario</button><button class="btn sec" data-act="descartar-jornadas">Descartar</button></div></div>
-      ${sinHorario ? `<p style="color:var(--rojo)">${sinHorario} partidos no cupieron en los horarios de su semana; quedarán "por definir" y puedes asignarles fecha en Resultados. Agrega más días u horarios si quieres evitarlo.</p>` : ''}
-      ${[...porJ.entries()].map(([j, l]) => `<h3>Jornada ${j}</h3>${l.map(p => filaPartido({ ...p, estado: 'programado' }, eq)).join('')}`).join('')}</div>`;
-  }
-  const lunes = (() => { const d = new Date(); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
-  return `<div class="card"><h2 style="margin-top:0">Generar rol "todos contra todos"</h2>
-    <p class="muted">${eqs.length} equipos${gs.length ? ` en ${gs.length} grupos (${gs.map(esc).join(', ')})` : ''}. ${eqs.length % 2 ? 'Como son impares, en cada jornada descansa un equipo.' : ''}
-    ${ps.length ? `Ya hay ${ps.length} partidos (${pendientes} sin jugar); los nuevos empezarán en la jornada ${maxJ + 1}.` : ''}</p>
+  const porJ = new Map();
+  borradores.forEach(p => { if (!porJ.has(p.jornada)) porJ.set(p.jornada, []); porJ.get(p.jornada).push(p); });
+  const htmlBorr = borradores.length ? `<div class="card" style="border-color:#f5c518">
+      <div class="fila entre"><h2 style="margin:0">Borradores: ${porJ.size} jornadas, ${borradores.length} partidos</h2>
+        <div class="fila"><button class="btn" data-act="publicar-todo">Publicar todas</button><button class="btn peligro" data-act="borrar-borradores">Borrar borradores</button></div></div>
+      <p class="muted">Nadie más las ve hasta que las publiques. Revisa y corrige fechas y horarios; con ⇄ cambias quién es local.</p>
+      ${[...porJ.entries()].map(([j, l]) => `<div class="card" style="margin:10px 0"><div class="fila entre"><h3 style="margin:0">Jornada ${j}</h3>
+          <button class="btn chico" data-act="publicar-jornada" data-j="${j}">Publicar jornada ${j}</button></div>
+        <div class="tabla-wrap"><table><tbody>${l.map(p => `<tr>
+          <td class="izq">${esc(eq.get(p.local_id)?.nombre)}</td><td><button class="btn sec chico" data-act="b-invertir" data-id="${p.id}" title="Cambiar localía">⇄</button></td>
+          <td class="izq">${esc(eq.get(p.visita_id)?.nombre)}</td>
+          <td><input type="date" value="${esc(p.fecha || '')}" data-cambio="b-fecha" data-id="${p.id}"></td>
+          <td><input type="time" value="${esc(p.hora || '')}" data-cambio="b-hora" data-id="${p.id}"></td>
+          <td><button class="btn peligro chico" data-act="borrar-partido" data-id="${p.id}">x</button></td></tr>`).join('')}</tbody></table></div></div>`).join('')}
+    </div>` : '';
+  return `<div class="card"><h2 style="margin-top:0">Generar jornadas que faltan</h2>
+    <p class="muted">${eqs.length} equipos · ${publicados.length} partidos publicados hasta la jornada ${Math.max(0, ...publicados.map(p => p.jornada))}.
+      ${faltanIda ? `Faltan <b>${faltanIda}</b> cruces de la ida (equipos que todavía no se enfrentan).` : 'Ya se enfrentaron todos en la ida.'}
+      Se arman jornadas con rivales que no se han enfrentado y, si marcas la vuelta, después se repite todo con la localía invertida. Todo queda en <b>borrador</b> hasta que lo publiques.</p>
     <form data-form="generar"><div class="form-grid">
-      <div class="campo"><label>Semana de inicio (fecha de la jornada 1)</label><input name="inicio" type="date" required value="${lunes}"></div>
+      <div class="campo"><label>Fecha de la primera jornada nueva</label><input name="inicio" type="date" required value="${siguienteLunes(ultimaFecha)}"></div>
       <div class="campo"><label>Horarios (separados por coma)</label><input name="horas" value="19:00, 20:00, 21:00"></div>
       <div class="campo"><label>Cancha</label><input name="cancha" value="${esc(t.sede || '')}"></div>
       <div class="campo"><label>Semanas entre jornadas</label><input name="semanas" type="number" min="1" value="1"></div>
     </div>
     <div class="campo"><label>Días de juego</label><div class="chips">${DIAS.map((d, i) => `<label><input type="checkbox" name="dias" value="${i}" ${i === 1 || i === 2 ? 'checked' : ''}> ${d}</label>`).join('')}</div></div>
     <div class="chips" style="margin-bottom:12px">
-      <label><input type="checkbox" name="vuelta"> Ida y vuelta</label>
+      <label><input type="checkbox" name="vuelta" checked> Incluir la vuelta</label>
       ${gs.length ? `<label><input type="checkbox" name="porGrupo" checked> Solo partidos dentro de cada grupo</label>` : ''}
     </div>
-    <button class="btn" type="submit" ${eqs.length < 2 ? 'disabled' : ''}>Ver vista previa</button></form></div>
-    ${htmlPrev}
+    <button class="btn" type="submit" ${eqs.length < 2 ? 'disabled' : ''}>Generar en borrador</button>
+    <span class="muted" style="margin-left:8px;font-size:13px">Las nuevas empiezan en la jornada ${maxJ + 1}.</span></form></div>
+    ${htmlBorr}
     <div class="card"><h2 style="margin-top:0">Agregar un partido suelto</h2>
       <form data-form="partido-manual"><div class="form-grid">
         <div class="campo"><label>Jornada</label><input name="jornada" type="number" min="1" required value="${Math.max(1, maxJ)}"></div>
@@ -461,64 +522,187 @@ function admGenerar(t) {
         <div class="campo"><label>Visitante</label><select name="visita_id" required>${eqs.map((e, i) => `<option value="${e.id}" ${i === 1 ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select></div>
         <div class="campo"><label>Fecha</label><input name="fecha" type="date"></div>
         <div class="campo"><label>Hora</label><input name="hora" type="time"></div>
-      </div><button class="btn" type="submit">Agregar partido</button></form></div>
-    ${pendientes ? `<div class="card"><h2 style="margin-top:0">Rehacer el rol</h2><p class="muted">Borra los ${pendientes} partidos que aún no se juegan (los jugados se conservan).</p>
-      <button class="btn peligro" data-act="borrar-pendientes">Borrar partidos sin jugar</button></div>` : ''}`;
+      </div><button class="btn" type="submit">Agregar partido</button></form></div>`;
 }
 
-// ----- Resultados -----
-function admResultados(t) {
-  const ps = partidosDe(t.id);
-  if (!ps.length) return `<div class="card vacio">No hay partidos. Ve a <a href="#/admin" data-act="tab" data-clave="tabAdmin" data-id="generar">Generar jornadas</a>.</div>`;
-  const jornadas = [...new Set(ps.map(p => p.jornada))];
-  if (!jornadas.includes(st.jornadaAdmin)) {
-    st.jornadaAdmin = (ps.find(p => p.estado === 'programado') || ps[ps.length - 1]).jornada;
+function generarJornadas(f, d) {
+  const fd = new FormData(f);
+  const dias = fd.getAll('dias').map(Number);
+  const horas = d.horas.split(',').map(h => h.trim()).filter(h => /^\d{1,2}:\d{2}$/.test(h)).map(h => h.padStart(5, '0'));
+  if (!dias.length || !horas.length) { toast('Elige al menos un día y un horario válido (ej. 19:00)', true); return; }
+  const eqs = equiposDe(st.torneoId);
+  const gs = grupos(eqs);
+  const ps = partidosDe(st.torneoId);
+  const cuenta = enfrentamientos(ps);
+  let bloques = [eqs];
+  if (gs.length && fd.has('porGrupo')) {
+    const sinGrupo = eqs.filter(e => !(e.grupo || '').trim());
+    if (sinGrupo.length) { toast(`Hay equipos sin grupo: ${sinGrupo.map(e => e.nombre).join(', ')}`, true); return; }
+    bloques = gs.map(g => eqs.filter(e => e.grupo.trim() === g));
   }
+  const paresDe = (be, filtro) => {
+    const r = [];
+    for (let i = 0; i < be.length; i++) for (let k = i + 1; k < be.length; k++) if (filtro(be[i].id, be[k].id)) r.push([be[i].id, be[k].id]);
+    return r;
+  };
+  // 1) Ida: parejas que nunca se han enfrentado.
+  const ida = equilibrarLocalia(unirGrupos(bloques.map(be => acomodarEnJornadas(paresDe(be, (a, b) => !cuenta.get(claveP(a, b))), be.length))), ps);
+  // 2) Vuelta: todas las parejas otra vez con la localía invertida.
+  let vuelta = [];
+  if (fd.has('vuelta')) {
+    const yaDoble = [...cuenta.values()].some(v => v >= 2);
+    if (!yaDoble) {
+      const porJ = new Map();
+      ps.slice().sort((a, b) => a.jornada - b.jornada).forEach(p => { if (!porJ.has(p.jornada)) porJ.set(p.jornada, []); porJ.get(p.jornada).push([p.local_id, p.visita_id]); });
+      vuelta = [...porJ.values(), ...ida].map(j => j.map(([a, b]) => [b, a]));
+    } else {
+      const previo = new Map();
+      ps.forEach(p => previo.set(claveP(p.local_id, p.visita_id), [p.local_id, p.visita_id]));
+      ida.flat().forEach(([a, b]) => previo.set(claveP(a, b), [a, b]));
+      const pares = [];
+      bloques.forEach(be => paresDe(be, (a, b) => (cuenta.get(claveP(a, b)) || 0) + (ida.flat().some(([x, y]) => claveP(x, y) === claveP(a, b)) ? 1 : 0) === 1)
+        .forEach(([a, b]) => { const [l, v] = previo.get(claveP(a, b)); pares.push([v, l]); }));
+      vuelta = acomodarEnJornadas(pares, eqs.length);
+    }
+  }
+  const todas = [...ida, ...vuelta];
+  if (!todas.length) { toast('No hay cruces pendientes por generar.'); return; }
+  const maxJ = Math.max(0, ...ps.map(p => p.jornada));
+  const nuevos = calendarizar(todas, { inicio: d.inicio, dias, horas, cancha: d.cancha, semanasEntreJornadas: Number(d.semanas) || 1, jornadaInicial: maxJ + 1 });
+  seguro(async () => {
+    await insertar('partidos', nuevos.map(p => ({ ...p, torneo_id: st.torneoId, estado: 'borrador' })));
+    toast(`${todas.length} jornadas (${nuevos.length} partidos) creadas en borrador`);
+  });
+}
+
+// ----- Capturar juegos -----
+const TIPOS = ['gol', 'amarilla', 'roja', 'azul'];
+const MAX_TIPO = { gol: 30, amarilla: 2, roja: 1, azul: 5 };
+
+function admResultados(t) {
+  if (st.cap) return pantallaCaptura();
+  const ps = partidosDe(t.id).filter(p => p.estado !== 'borrador');
+  if (!ps.length) return `<div class="card vacio">No hay partidos publicados.${db.rol === 'admin' ? ' Ve a "Generar jornadas".' : ''}</div>`;
   const eq = mapa(equiposDe(t.id));
-  const lista = ps.filter(p => p.jornada === st.jornadaAdmin);
-  const selJ = `<div class="fila"><label style="margin:0">Jornada</label><select data-cambio="jornada" style="width:auto">${jornadas.map(j =>
+  const hoy = hoyISO();
+  const pend = ps.filter(p => p.estado === 'programado').sort((a, b) => String(a.fecha || '9').localeCompare(String(b.fecha || '9')) || String(a.hora || '').localeCompare(String(b.hora || '')));
+  const porCapturar = pend.filter(p => !p.fecha || p.fecha <= hoy);
+  const lista = porCapturar.length ? porCapturar : pend.slice(0, 5);
+  const filaPend = p => `<div class="fila entre" style="padding:8px 0;border-bottom:1px solid var(--borde)">
+      <div><b>${esc(eq.get(p.local_id)?.nombre)}</b> vs <b>${esc(eq.get(p.visita_id)?.nombre)}</b>
+      <div class="muted" style="font-size:13px">Jornada ${p.jornada} · ${p.fecha === hoy ? '<b style="color:var(--verde)">HOY</b>' : fmtFecha(p.fecha)} ${fmtHora(p.hora)}</div></div>
+      <button class="btn" data-act="capturar" data-id="${p.id}">Capturar resultado</button></div>`;
+  const cabPend = lista.length ? `<div class="card"><h2 style="margin-top:0">${porCapturar.length ? `Por capturar (${porCapturar.length})` : 'Próximos juegos'}</h2>${lista.map(filaPend).join('')}</div>` : '';
+  const jornadas = [...new Set(ps.map(p => p.jornada))];
+  if (!jornadas.includes(st.jornadaAdmin)) st.jornadaAdmin = (pend[0] || ps[ps.length - 1]).jornada;
+  const enJ = ps.filter(p => p.jornada === st.jornadaAdmin);
+  const selJ = `<div class="fila" style="margin:6px 0 10px"><h2 style="margin:0">Todos los juegos</h2><select data-cambio="jornada" style="width:auto">${jornadas.map(j =>
     `<option value="${j}" ${j === st.jornadaAdmin ? 'selected' : ''}>Jornada ${j}${ps.filter(p => p.jornada === j).every(p => p.estado === 'jugado') ? ' ✓' : ''}</option>`).join('')}</select></div>`;
-  return selJ + lista.map(p => {
+  return cabPend + selJ + enJ.map(p => {
     const L = eq.get(p.local_id), V = eq.get(p.visita_id);
-    const abierto = st.abierto === p.id;
     const evs = D().eventos.filter(e => e.partido_id === p.id);
-    const jug = mapa(D().jugadores);
-    const golesL = evs.filter(e => e.tipo === 'gol' && e.equipo_id === p.local_id).length;
-    const golesV = evs.filter(e => e.tipo === 'gol' && e.equipo_id === p.visita_id).length;
-    const descuadre = evs.some(e => e.tipo === 'gol') && p.goles_local != null && (golesL !== Number(p.goles_local) || golesV !== Number(p.goles_visita));
-    const opcionesJug = [L, V].filter(Boolean).map(e => `<optgroup label="${esc(e.nombre)}">${jugadoresDe(e.id).filter(j => j.activo !== false).map(j =>
-      `<option value="${j.id}">${j.numero != null ? j.numero + ' · ' : ''}${esc(j.nombre)}</option>`).join('')}</optgroup>`).join('');
+    const goles = evs.filter(e => e.tipo === 'gol').length, tarj = evs.length - goles;
     return `<div class="card">
-      <form data-form="resultado" data-id="${p.id}">
-        <div class="fila" style="justify-content:center;font-weight:600">
-          <span style="flex:1;text-align:right;min-width:90px">${esc(L?.nombre)}</span>
-          <input class="num" name="goles_local" type="number" min="0" value="${p.goles_local ?? ''}" aria-label="Goles ${esc(L?.nombre)}">
-          <span>–</span>
-          <input class="num" name="goles_visita" type="number" min="0" value="${p.goles_visita ?? ''}" aria-label="Goles ${esc(V?.nombre)}">
-          <span style="flex:1;min-width:90px">${esc(V?.nombre)}</span>
-        </div>
-        <div class="form-grid" style="margin-top:8px">
+      <div class="fila" style="justify-content:center;font-weight:600;gap:12px">
+        <span style="flex:1;text-align:right;min-width:90px">${esc(L?.nombre)}</span>
+        <span class="marcador">${p.estado === 'jugado' ? `${p.goles_local} – ${p.goles_visita}` : 'vs'}</span>
+        <span style="flex:1;min-width:90px">${esc(V?.nombre)}</span></div>
+      <div class="muted" style="text-align:center;font-size:13px;margin:4px 0 8px">${fmtFecha(p.fecha)} ${fmtHora(p.hora)} · ${p.estado}${evs.length ? ` · ${goles} goles y ${tarj} tarjetas capturados` : ''}</div>
+      <div class="fila" style="justify-content:center"><button class="btn" data-act="capturar" data-id="${p.id}">${p.estado === 'jugado' ? 'Corregir resultado' : 'Capturar resultado'}</button>
+        <button class="btn sec chico" data-act="detalles" data-id="${p.id}">${st.abierto === p.id ? 'Ocultar' : 'Fecha, estado y notas'}</button>
+        ${db.rol === 'admin' ? `<button class="btn peligro chico" data-act="borrar-partido" data-id="${p.id}">Borrar</button>` : ''}</div>
+      ${st.abierto === p.id ? `<form data-form="resultado" data-id="${p.id}" style="margin-top:10px">
+        <div class="form-grid">
+          <div class="campo"><label>Goles ${esc(L?.nombre)}</label><input name="goles_local" type="number" min="0" value="${p.goles_local ?? ''}"></div>
+          <div class="campo"><label>Goles ${esc(V?.nombre)}</label><input name="goles_visita" type="number" min="0" value="${p.goles_visita ?? ''}"></div>
           <div class="campo"><label>Fecha</label><input name="fecha" type="date" value="${esc(p.fecha || '')}"></div>
           <div class="campo"><label>Hora</label><input name="hora" type="time" value="${esc(p.hora || '')}"></div>
           <div class="campo"><label>Estado</label><select name="estado">${['programado', 'jugado', 'suspendido'].map(s => `<option ${s === p.estado ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
           <div class="campo"><label>Notas</label><input name="notas" value="${esc(p.notas || '')}" placeholder="Ej. ganado por default"></div>
-        </div>
-        <div class="fila"><button class="btn chico" type="submit">Guardar resultado</button>
-          <button class="btn sec chico" type="button" data-act="detalles" data-id="${p.id}">${abierto ? 'Ocultar' : 'Goles y tarjetas'} (${evs.length})</button>
-          <button class="btn peligro chico" type="button" data-act="borrar-partido" data-id="${p.id}">Borrar partido</button></div>
-      </form>
-      ${descuadre ? `<p style="color:var(--rojo);font-size:13px">Ojo: los goles capturados por jugador (${golesL}–${golesV}) no coinciden con el marcador.</p>` : ''}
-      ${abierto ? `<ul class="eventos">${evs.map(e => `<li>${e.tipo === 'gol' ? '⚽' : `<span class="tarjeta ${e.tipo}"></span>`} ${esc(jug.get(e.jugador_id)?.nombre || '¿?')}
-          <span class="muted">(${esc(eq.get(e.equipo_id)?.nombre || '')}${e.minuto != null ? ', min ' + e.minuto : ''})</span>
-          <button class="btn peligro chico" data-act="borrar-evento" data-id="${e.id}">x</button></li>`).join('') || '<li class="muted">Sin goles ni tarjetas.</li>'}</ul>
-        ${opcionesJug.includes('<option') ? `<form data-form="evento" data-partido="${p.id}"><div class="form-grid">
-          <div class="campo"><label>Tipo</label><select name="tipo"><option value="gol">⚽ Gol</option><option value="amarilla">Tarjeta amarilla</option><option value="roja">Tarjeta roja</option><option value="azul">Tarjeta azul</option></select></div>
-          <div class="campo"><label>Jugador</label><select name="jugador_id" required>${opcionesJug}</select></div>
-          <div class="campo"><label>Minuto (opcional)</label><input name="minuto" type="number" min="0" max="120"></div>
-          <div class="campo"><button class="btn" type="submit">Agregar</button></div></div></form>`
-        : '<p class="muted">Registra jugadores en "Equipos y jugadores" para capturar goles y tarjetas.</p>'}` : ''}
+        </div><button class="btn chico" type="submit">Guardar</button></form>` : ''}
     </div>`;
   }).join('');
+}
+
+function abrirCaptura(id) {
+  const p = D().partidos.find(x => x.id === id);
+  const c = {};
+  D().eventos.filter(e => e.partido_id === id).forEach(e => { (c[e.jugador_id] ||= { gol: 0, amarilla: 0, roja: 0, azul: 0 })[e.tipo]++; });
+  const golesEv = eqId => D().eventos.filter(e => e.partido_id === id && e.tipo === 'gol' && e.equipo_id === eqId).length;
+  const manual = p.estado === 'jugado' && (Number(p.goles_local) !== golesEv(p.local_id) || Number(p.goles_visita) !== golesEv(p.visita_id));
+  st.cap = { id, c, manual, gl: p.goles_local ?? 0, gv: p.goles_visita ?? 0 };
+  window.scrollTo?.(0, 0);
+}
+
+function marcadorCaptura(p) {
+  const cap = st.cap;
+  if (cap.manual) return [Number(cap.gl) || 0, Number(cap.gv) || 0];
+  const suma = eqId => jugadoresDe(eqId).reduce((a, j) => a + (cap.c[j.id]?.gol || 0), 0);
+  return [suma(p.local_id), suma(p.visita_id)];
+}
+
+function pantallaCaptura() {
+  const p = D().partidos.find(x => x.id === st.cap.id);
+  if (!p) { st.cap = null; return ''; }
+  const eq = mapa(D().equipos);
+  const [gl, gv] = marcadorCaptura(p);
+  const columna = eqId => {
+    const js = jugadoresDe(eqId).filter(j => j.activo !== false || st.cap.c[j.id]);
+    return `<div class="card"><h3 style="margin-top:0">${esc(eq.get(eqId)?.nombre)}</h3>
+      ${js.length ? `<div class="tabla-wrap"><table class="cap-tabla"><thead><tr><th class="izq">Jugador</th><th>⚽ Goles</th><th><span class="tarjeta amarilla"></span></th><th><span class="tarjeta roja"></span></th><th><span class="tarjeta azul"></span></th></tr></thead><tbody>
+      ${js.map(j => { const v = st.cap.c[j.id] || {}; return `<tr><td class="izq"><span class="muted">${j.numero ?? ''}</span> ${esc(j.nombre)}</td>
+        ${TIPOS.map(tp => `<td><div class="paso"><button type="button" data-act="cap-menos" data-id="${j.id}" data-tipo="${tp}" ${!v[tp] ? 'disabled' : ''}>−</button>
+          <b class="${v[tp] ? 'con' : ''}">${v[tp] || 0}</b><button type="button" data-act="cap-mas" data-id="${j.id}" data-tipo="${tp}">+</button></div></td>`).join('')}</tr>`; }).join('')}
+      </tbody></table></div>` : '<p class="muted">Este equipo no tiene jugadores registrados.</p>'}</div>`;
+  };
+  return `<div class="card cap-cab">
+      <div class="muted" style="text-align:center">Jornada ${p.jornada} · ${fmtFecha(p.fecha)} ${fmtHora(p.hora)}</div>
+      <div class="cap-marcador"><span>${esc(eq.get(p.local_id)?.nombre)}</span>
+        ${st.cap.manual ? `<input class="num" type="number" min="0" value="${gl}" data-cambio="cap-gl"> – <input class="num" type="number" min="0" value="${gv}" data-cambio="cap-gv">`
+          : `<b>${gl} – ${gv}</b>`}<span>${esc(eq.get(p.visita_id)?.nombre)}</span></div>
+      <label style="display:flex;gap:6px;justify-content:center;align-items:center;margin:6px 0 0"><input type="checkbox" data-act="cap-manual" ${st.cap.manual ? 'checked' : ''}> Ajustar marcador a mano (default o autogol)</label>
+    </div>
+    <div class="cap-cols">${columna(p.local_id)}${columna(p.visita_id)}</div>
+    <div class="fila" style="justify-content:center;margin:10px 0 20px"><button class="btn" data-act="cap-guardar">Guardar resultado</button><button class="btn sec" data-act="cap-cancelar">Cancelar</button></div>
+    <p class="muted" style="text-align:center;font-size:13px">Cada tarjeta genera su multa; la roja o la segunda amarilla generan 1 partido de suspensión.</p>`;
+}
+
+// Registra un gol o tarjeta, con su multa y suspensión automática.
+async function registrarEvento(p, j, tipo) {
+  const [ev] = await insertar('eventos', { partido_id: p.id, jugador_id: j.id, equipo_id: j.equipo_id, tipo });
+  if (tipo === 'gol' || db.faltaMigracion) return null;
+  const tor = D().torneos.find(x => x.id === D().equipos.find(e => e.id === j.equipo_id)?.torneo_id);
+  const monto = Number(tor?.['multa_' + tipo] ?? 0);
+  const fecha = p.fecha || hoyISO();
+  if (monto) await insertar('pagos', { jugador_id: j.id, evento_id: ev.id, concepto: 'multa', monto, pagado: false, fecha, notas: 'Tarjeta ' + tipo });
+  const amarillas = D().eventos.filter(x => x.partido_id === p.id && x.jugador_id === j.id && x.tipo === 'amarilla').length;
+  const motivo = tipo === 'roja' ? 'Tarjeta roja' : (tipo === 'amarilla' && amarillas === 2 ? 'Doble amarilla' : null);
+  if (motivo && !D().suspensiones.some(s => s.jugador_id === j.id && s.partido_id === p.id && s.motivo === motivo)) {
+    await insertar('suspensiones', { jugador_id: j.id, partido_id: p.id, partidos: 1, fecha, motivo });
+  }
+  return motivo;
+}
+
+async function guardarCaptura() {
+  const p = D().partidos.find(x => x.id === st.cap.id);
+  const [gl, gv] = marcadorCaptura(p);
+  const js = [...jugadoresDe(p.local_id), ...jugadoresDe(p.visita_id)];
+  const avisos = [];
+  for (const j of js) {
+    for (const tipo of TIPOS) {
+      const ex = D().eventos.filter(e => e.partido_id === p.id && e.jugador_id === j.id && e.tipo === tipo);
+      const quiero = st.cap.c[j.id]?.[tipo] || 0;
+      for (let k = ex.length; k < quiero; k++) { const m = await registrarEvento(p, j, tipo); if (m) avisos.push(`${j.nombre}: ${m}`); }
+      if (quiero < ex.length) await borrar('eventos', ex.slice(quiero).map(e => e.id));
+    }
+    const v = st.cap.c[j.id] || {};
+    const quitar = D().suspensiones.filter(s => s.jugador_id === j.id && s.partido_id === p.id &&
+      ((s.motivo === 'Tarjeta roja' && !v.roja) || (s.motivo === 'Doble amarilla' && (v.amarilla || 0) < 2)));
+    if (quitar.length) await borrar('suspensiones', quitar.map(s => s.id));
+  }
+  await actualizar('partidos', p.id, { goles_local: gl, goles_visita: gv, estado: 'jugado' });
+  st.cap = null;
+  toast(`Resultado guardado: ${gl} – ${gv}${avisos.length ? ' · Suspensiones: ' + avisos.join(', ') : ''}`);
 }
 
 // ----- Respaldo -----
@@ -542,7 +726,7 @@ $app.addEventListener('click', ev => {
   const { act, id } = b.dataset;
   if (b.tagName === 'A') ev.preventDefault();
   const acciones = {
-    tab: () => { st[b.dataset.clave] = id; st.vistaPrevia = st.tabAdmin === 'generar' ? st.vistaPrevia : null; render(); },
+    tab: () => { st[b.dataset.clave] = id; st.cap = null; render(); },
     'elegir-torneo': () => { st.torneoId = id; guardarPref(); render(); },
     'borrar-torneo': () => confirm('¿Borrar este torneo con TODOS sus equipos, jugadores y partidos? No se puede deshacer.') &&
       seguro(async () => { await borrar('torneos', id); st.torneoId = null; toast('Torneo borrado'); }),
@@ -569,20 +753,34 @@ $app.addEventListener('click', ev => {
     'borrar-pago': () => confirm('¿Borrar este cargo?') && seguro(() => borrar('pagos', id)),
     'borrar-susp': () => confirm('¿Quitar esta suspensión?') && seguro(() => borrar('suspensiones', id)),
     'ver-perfil': () => seguro(async () => {
-      const { tokenDe } = await import('./db.js');
       const tk = await tokenDe(id);
       window.open(location.pathname + '#/j/' + tk, '_blank');
     }),
     imprimir: () => window.print(),
     'cred-todos': () => { st.credTodos = b.checked; render(); },
-    'guardar-jornadas': () => seguro(async () => {
-      await insertar('partidos', st.vistaPrevia.map(p => ({ ...p, torneo_id: st.torneoId, estado: 'programado' })));
-      toast(`${st.vistaPrevia.length} partidos guardados`); st.vistaPrevia = null; st.tabAdmin = 'resultados'; st.jornadaAdmin = null;
+    'publicar-jornada': () => seguro(async () => {
+      const j = Number(b.dataset.j);
+      await actualizarVarios('partidos', partidosDe(st.torneoId).filter(p => p.estado === 'borrador' && p.jornada === j).map(p => p.id), { estado: 'programado' });
+      toast(`Jornada ${j} publicada`);
     }),
-    'descartar-jornadas': () => { st.vistaPrevia = null; render(); },
-    'borrar-pendientes': () => confirm('¿Borrar todos los partidos que no se han jugado?') && seguro(async () => {
-      await borrar('partidos', partidosDe(st.torneoId).filter(p => p.estado !== 'jugado').map(p => p.id)); toast('Partidos sin jugar borrados');
+    'publicar-todo': () => confirm('¿Publicar todas las jornadas en borrador? Ya las podrá ver todo mundo.') && seguro(async () => {
+      const ids = partidosDe(st.torneoId).filter(p => p.estado === 'borrador').map(p => p.id);
+      await actualizarVarios('partidos', ids, { estado: 'programado' }); toast(`${ids.length} partidos publicados`);
     }),
+    'borrar-borradores': () => confirm('¿Borrar todas las jornadas en borrador?') && seguro(async () => {
+      await borrar('partidos', partidosDe(st.torneoId).filter(p => p.estado === 'borrador').map(p => p.id)); toast('Borradores eliminados');
+    }),
+    'b-invertir': () => seguro(async () => {
+      const p = D().partidos.find(x => x.id === id);
+      await actualizar('partidos', id, { local_id: p.visita_id, visita_id: p.local_id });
+    }),
+    capturar: () => { abrirCaptura(id); render(); },
+    'cap-mas': () => { const v = (st.cap.c[id] ||= { gol: 0, amarilla: 0, roja: 0, azul: 0 }); const tp = b.dataset.tipo; if ((v[tp] || 0) < MAX_TIPO[tp]) v[tp] = (v[tp] || 0) + 1; render(); },
+    'cap-menos': () => { const v = st.cap.c[id]; const tp = b.dataset.tipo; if (v && v[tp] > 0) v[tp]--; render(); },
+    'cap-manual': () => { const p = D().partidos.find(x => x.id === st.cap.id); const [gl, gv] = marcadorCaptura(p); st.cap.manual = b.checked; st.cap.gl = gl; st.cap.gv = gv; render(); },
+    'cap-cancelar': () => { st.cap = null; render(); },
+    'cap-guardar': () => seguro(guardarCaptura),
+    'pagos-equipo': () => { st.pagosEquipo = st.pagosEquipo === id ? null : id; render(); },
     detalles: () => { st.abierto = st.abierto === id ? null : id; render(); },
     'borrar-partido': () => confirm('¿Borrar este partido?') && seguro(() => borrar('partidos', id)),
     'borrar-evento': () => seguro(() => borrar('eventos', id)),
@@ -603,6 +801,9 @@ $app.addEventListener('change', ev => {
   const c = el.dataset.cambio;
   if (c === 'torneo') { st.torneoId = el.value; st.jornadaAdmin = null; st.vistaPrevia = null; guardarPref(); render(); }
   if (c === 'jornada') { st.jornadaAdmin = Number(el.value); st.abierto = null; render(); }
+  if (c === 'b-fecha' || c === 'b-hora') seguro(() => actualizar('partidos', el.dataset.id, { [c === 'b-fecha' ? 'fecha' : 'hora']: el.value }));
+  if (c === 'cap-gl') st.cap.gl = Number(el.value) || 0;
+  if (c === 'cap-gv') st.cap.gv = Number(el.value) || 0;
   if (c === 'importar' && el.files[0]) {
     el.files[0].text().then(txt => seguro(async () => {
       const r = await importarJSON(txt);
@@ -656,28 +857,7 @@ $app.addEventListener('submit', ev => {
       });
       await insertar('jugadores', filas); toast(`${filas.length} jugadores agregados`);
     }),
-    generar: () => {
-      const fd = new FormData(f);
-      const dias = fd.getAll('dias').map(Number);
-      const horas = d.horas.split(',').map(h => h.trim()).filter(h => /^\d{1,2}:\d{2}$/.test(h)).map(h => h.padStart(5, '0'));
-      if (!dias.length || !horas.length) { toast('Elige al menos un día y un horario válido (ej. 19:00)', true); return; }
-      const eqs = equiposDe(st.torneoId);
-      const gs = grupos(eqs);
-      const vuelta = fd.has('vuelta');
-      let jornadas;
-      if (gs.length && fd.has('porGrupo')) {
-        const sinGrupo = eqs.filter(e => !(e.grupo || '').trim());
-        if (sinGrupo.length) { toast(`Hay equipos sin grupo: ${sinGrupo.map(e => e.nombre).join(', ')}`, true); return; }
-        jornadas = unirGrupos(gs.map(g => todosContraTodos(eqs.filter(e => e.grupo.trim() === g).map(e => e.id), vuelta)));
-      } else {
-        // Revuelve el orden para que el rol no salga siempre alfabético.
-        const ids = eqs.map(e => e.id).sort(() => Math.random() - 0.5);
-        jornadas = todosContraTodos(ids, vuelta);
-      }
-      const maxJ = Math.max(0, ...partidosDe(st.torneoId).map(p => p.jornada));
-      st.vistaPrevia = calendarizar(jornadas, { inicio: d.inicio, dias, horas, cancha: d.cancha, semanasEntreJornadas: Number(d.semanas) || 1, jornadaInicial: maxJ + 1 });
-      render();
-    },
+    generar: () => generarJornadas(f, d),
     'partido-manual': () => {
       if (d.local_id === d.visita_id) { toast('Local y visitante deben ser distintos', true); return; }
       seguro(async () => {
@@ -713,6 +893,10 @@ $app.addEventListener('submit', ev => {
         toast(`${motivo}: multa de $${monto} y 1 partido de suspensión (puedes ajustarlo en Pagos del jugador)`);
       } else if (monto) toast(`Multa de $${monto} registrada`);
     }),
+    'pago-equipo': () => seguro(async () => {
+      await insertar('pagos', { equipo_id: f.dataset.equipo, concepto: d.concepto, monto: Number(d.monto), pagado: !!d.pagado, notas: d.notas, fecha: hoyISO() });
+      toast('Cargo del equipo agregado');
+    }),
     pago: () => seguro(async () => {
       await insertar('pagos', { jugador_id: f.dataset.jugador, concepto: d.concepto, monto: Number(d.monto), pagado: !!d.pagado, notas: d.notas, fecha: hoyISO() });
       toast('Cargo agregado');
@@ -725,7 +909,7 @@ $app.addEventListener('submit', ev => {
   formularios[tipo]?.();
 });
 
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', () => { render(); window.scrollTo?.(0, 0); });
 
 // ---------- arranque ----------
 document.getElementById('nombre-liga').textContent = NOMBRE_LIGA;

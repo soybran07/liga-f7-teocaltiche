@@ -57,3 +57,53 @@ export function calendarizar(jornadas, { inicio, dias, horas, cancha = '', seman
   });
   return partidos;
 }
+
+const clave = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+// Cuántas veces se ha enfrentado cada pareja (en cualquier estado: jugado, programado o borrador).
+export function enfrentamientos(partidos) {
+  const m = new Map();
+  partidos.forEach(p => { const k = clave(p.local_id, p.visita_id); m.set(k, (m.get(k) || 0) + 1); });
+  return m;
+}
+
+// Acomoda en jornadas los cruces de "pares" (lista de [a, b]) sin que un equipo juegue dos veces en la misma jornada,
+// buscando el menor número de jornadas (cada jornada lo más llena posible).
+export function acomodarEnJornadas(pares, nEquipos) {
+  if (!pares.length) return [];
+  const grado = new Map();
+  pares.forEach(([a, b]) => { grado.set(a, (grado.get(a) || 0) + 1); grado.set(b, (grado.get(b) || 0) + 1); });
+  const minimo = Math.max(Math.max(...grado.values()), Math.ceil(pares.length / Math.max(1, Math.floor(nEquipos / 2))));
+  let mejor = null;
+  for (let intento = 0; intento < 600; intento++) {
+    let resto = [...pares];
+    const jornadas = [];
+    while (resto.length) {
+      const g = new Map();
+      resto.forEach(([a, b]) => { g.set(a, (g.get(a) || 0) + 1); g.set(b, (g.get(b) || 0) + 1); });
+      const orden = resto.map(e => ({ e, w: g.get(e[0]) + g.get(e[1]) + Math.random() * 1.5 })).sort((x, y) => y.w - x.w);
+      const usados = new Set(), jornada = [];
+      for (const { e } of orden) {
+        if (usados.has(e[0]) || usados.has(e[1])) continue;
+        jornada.push(e); usados.add(e[0]); usados.add(e[1]);
+      }
+      jornadas.push(jornada);
+      const puestos = new Set(jornada);
+      resto = resto.filter(e => !puestos.has(e));
+    }
+    if (!mejor || jornadas.length < mejor.length) mejor = jornadas;
+    if (mejor.length <= minimo) break;
+  }
+  return mejor;
+}
+
+// Decide localía equilibrando cuántas veces ha sido local cada equipo.
+export function equilibrarLocalia(jornadas, partidosPrevios) {
+  const casa = new Map();
+  partidosPrevios.forEach(p => casa.set(p.local_id, (casa.get(p.local_id) || 0) + 1));
+  return jornadas.map(j => j.map(([a, b]) => {
+    const [l, v] = (casa.get(a) || 0) <= (casa.get(b) || 0) ? [a, b] : [b, a];
+    casa.set(l, (casa.get(l) || 0) + 1);
+    return [l, v];
+  }));
+}

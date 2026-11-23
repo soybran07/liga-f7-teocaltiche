@@ -5,7 +5,7 @@ export const TABLAS = ['torneos', 'equipos', 'jugadores', 'jugadores_privado', '
 const SOLO_ADMIN = new Set(['jugadores_privado', 'pagos']);
 const LS_KEY = 'f7teo-datos-v1';
 
-export const db = { modo: 'demo', data: {}, user: null, esAdmin: false, client: null, faltaMigracion: false };
+export const db = { modo: 'demo', data: {}, user: null, esAdmin: false, rol: null, client: null, faltaMigracion: false, faltaRoles: false };
 
 export const nuevoToken = () => uuid().replace(/-/g, '').slice(0, 12);
 
@@ -43,14 +43,19 @@ export async function iniciar() {
     db.user = session?.user || null;
     db.esAdmin = db.user ? await revisarAdmin() : false;
   } else {
-    db.esAdmin = true;
+    db.esAdmin = true; db.rol = 'admin';
   }
   await cargarTodo();
 }
 
+// Guarda el rol del usuario (admin, finanzas, captura) y devuelve si es parte del equipo de la liga.
 async function revisarAdmin() {
+  const r = await db.client.rpc('mi_rol');
+  if (!r.error) { db.rol = r.data || null; db.faltaRoles = false; return !!db.rol; }
+  db.faltaRoles = true;
   const { data, error } = await db.client.rpc('es_admin');
-  return !error && data === true;
+  db.rol = !error && data === true ? 'admin' : null;
+  return !!db.rol;
 }
 
 export async function cargarTodo() {
@@ -186,7 +191,7 @@ export async function entrar(email, password) {
 
 export async function salir() {
   await db.client.auth.signOut();
-  db.user = null; db.esAdmin = false;
+  db.user = null; db.esAdmin = false; db.rol = null;
   await cargarTodo();
 }
 
@@ -209,5 +214,20 @@ export async function importarJSON(texto) {
 
 export function reiniciarDemo() {
   db.data = semilla();
+  guardarDemo();
+}
+
+// Actualiza varios registros con los mismos cambios.
+export async function actualizarVarios(tabla, ids, cambios) {
+  if (!ids.length) return;
+  const c = limpiar(cambios);
+  if (db.modo === 'supabase') {
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await db.client.from(tabla).update(c).in('id', ids.slice(i, i + 200));
+      if (error) throw new Error(error.message);
+    }
+  }
+  const set = new Set(ids);
+  db.data[tabla].forEach(f => { if (set.has(f.id)) Object.assign(f, c); });
   guardarDemo();
 }

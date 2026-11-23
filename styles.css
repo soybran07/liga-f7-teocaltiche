@@ -318,3 +318,17 @@ a { color: var(--verde); }
   .hoja-cred { gap: 5mm; padding: 0; }
   .cred-tira { box-shadow: none; }
 }
+
+/* ---------- Captura de resultado ---------- */
+.cap-cab { text-align: center; }
+.cap-marcador { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; font-family: var(--titulo); font-size: 22px; margin: 6px 0; }
+.cap-marcador b { font-size: 40px; min-width: 42px; }
+.cap-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cap-cols > .card { margin: 0; }
+@media (max-width: 760px) { .cap-cols { grid-template-columns: 1fr; } }
+.cap-tabla td, .cap-tabla th { padding: 4px 3px; }
+.paso { display: inline-flex; align-items: center; gap: 4px; }
+.paso button { width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.1); color: inherit; font-size: 16px; cursor: pointer; padding: 0; }
+.paso button:disabled { opacity: .3; cursor: default; }
+.paso b { min-width: 16px; text-align: center; opacity: .5; }
+.paso b.con { opacity: 1; color: #3fe39b; }
