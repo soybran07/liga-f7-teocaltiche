@@ -348,3 +348,51 @@ a { color: var(--verde); }
   background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.35); transition: background .2s; }
 .topnav .nav-salir:hover { background: rgba(232,16,42,.55); border-color: #fff; }
 @media (max-width: 560px) { .topnav .nav-salir { padding: 6px 10px; font-size: 13px; } }
+
+/* ---------- Cédula arbitral (hoja carta horizontal) ---------- */
+.ced-fuera { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(232,16,42,.18); border: 1px solid rgba(232,16,42,.5); font-size: 14px; display: grid; gap: 4px; }
+.ced-hoja { width: 263mm; min-height: 199mm; margin: 0 auto 20px; background: #fff; color: #000; padding: 6mm 7mm; box-sizing: border-box;
+  font-family: Arial, Helvetica, sans-serif; font-size: 10pt; display: flex; flex-direction: column; gap: 3mm; box-shadow: 0 10px 40px rgba(0,0,0,.35); }
+.ced-titulo { font-family: var(--titulo); font-size: 30pt; text-align: center; margin: 0; letter-spacing: .5px; line-height: 1; }
+.ced-datos { display: grid; grid-template-columns: 1.4fr .7fr 1.3fr; gap: 6mm; }
+.ced-valor { white-space: nowrap; }
+.ced-linea { display: flex; align-items: flex-end; gap: 2mm; }
+.ced-linea b { white-space: nowrap; font-size: 9.5pt; }
+.ced-valor { flex: 1; border-bottom: 1px solid #000; min-height: 5mm; font-weight: 700; padding: 0 1mm; font-size: 10pt; }
+.ced-cuerpo { display: grid; grid-template-columns: 1fr 58mm 1fr; gap: 5mm; flex: 1; }
+.ced-eq { display: flex; flex-direction: column; gap: 0; }
+.ced-eqcab { border: 1.5px solid #000; border-bottom: 0; padding: 2mm 2mm 1.5mm; display: grid; gap: 2mm; }
+.ced-faltas { display: flex; align-items: flex-end; gap: 2mm; }
+.ced-faltas b { font-size: 9.5pt; }
+.ced-casillas { display: flex; flex: 1; }
+.ced-falta { flex: 1; height: 5mm; border: 1px solid #000; margin-left: -1px; position: relative; }
+.ced-falta.shoot { border-width: 1.5px; background: #f0f0f0; }
+.ced-falta i { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); line-height: 0; }
+.ced-tabla { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.ced-tabla th, .ced-tabla td { border: 1px solid #000; padding: 0 1.5mm; height: 7.2mm; color: #000; background: #fff; text-align: center; font-size: 9.5pt; }
+.ced-tabla th { font-size: 8.5pt; height: 6mm; font-weight: 800; }
+.ced-tabla th:nth-child(2), .ced-tabla td.ced-nom { text-align: left; }
+.ced-tabla .ced-n { width: 7mm; font-weight: 800; }
+.ced-tabla th:nth-child(3), .ced-tabla th:nth-child(4) { width: 15mm; }
+.ced-tabla td.ced-nom { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 9pt; }
+.ced-apretada .ced-tabla td { height: 5.6mm; font-size: 8.5pt; }
+.ced-firma { border: 1.5px solid #000; margin-top: 2mm; height: 13mm; text-align: center; padding-top: 1mm; font-size: 9pt; }
+.ced-centro { display: flex; flex-direction: column; align-items: center; gap: 3mm; text-align: center; }
+.ced-centro b { font-size: 11pt; }
+.ced-marcador { display: flex; align-items: center; gap: 4mm; }
+.ced-marcador span { width: 21mm; height: 25mm; border: 2px solid #000; }
+.ced-marcador i { width: 7mm; height: 2.4mm; background: #000; }
+.ced-centro img { width: 50mm; height: 50mm; object-fit: contain; margin-top: 3mm; }
+.ced-regla { font-size: 7.5pt; display: flex; gap: 1.5mm; align-items: center; justify-content: center; color: #333; }
+.ced-pie { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10mm; align-items: end; }
+.ced-obs { display: grid; gap: 5mm; }
+.ced-obs span { border-bottom: 1px solid #000; height: 0; }
+.ced-firmas { display: grid; gap: 6mm; }
+@media screen and (max-width: 1100px) { .ced-hoja { zoom: .6; } }
+@media screen and (max-width: 640px) { .ced-hoja { zoom: .36; } }
+
+@media print {
+  :root, html, body { background: #fff !important; color-scheme: light !important; }
+  .ced-hoja { box-shadow: none; margin: 0; width: 100%; min-height: 0; height: 199mm; padding: 0; zoom: 1; break-inside: avoid; }
+  .ced-falta.shoot, .ced-tabla th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

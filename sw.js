@@ -1,10 +1,10 @@
 // Guarda la página en el teléfono para abrirla sin internet (en la cancha).
 // Archivos propios: primero internet (para tener siempre lo más nuevo) y si no hay, la copia guardada.
 // Librerías externas con versión fija: primero la copia guardada.
-const CACHE = 'f7teo-v3';
+const CACHE = 'f7teo-v4';
 const BASE = [
   './', 'index.html', 'styles.css', 'manifest.json',
-  'js/app.js', 'js/db.js', 'js/config.js', 'js/credenciales.js', 'js/roundrobin.js', 'js/stats.js', 'js/validar.js', 'js/vendor/qrcode.js',
+  'js/app.js', 'js/db.js', 'js/config.js', 'js/credenciales.js', 'js/cedula.js', 'js/roundrobin.js', 'js/stats.js', 'js/validar.js', 'js/vendor/qrcode.js',
   'img/logo-varonil.png', 'img/logo-femenil.png', 'img/cancha.jpg',
 ];
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';

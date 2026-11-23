@@ -1,5 +1,6 @@
 import { db, iniciar, insertar, actualizar, actualizarVarios, borrar, entrar, salir, exportarJSON, importarJSON, reiniciarDemo, guardarPrivado, tokenDe, sincronizar, usuarios } from './db.js';
 import { vistaPerfil, vistaCredenciales, estadoPagos, suspensionActiva, folioTxt } from './credenciales.js';
+import { vistaCedula } from './cedula.js';
 import { unirGrupos, calendarizar, enfrentamientos, acomodarEnJornadas, equilibrarLocalia } from './roundrobin.js';
 const claveP = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 import { tablaPosiciones, tablaGoleo, tablaDisciplina } from './stats.js';
@@ -81,6 +82,7 @@ function ruta() {
   if (h.startsWith('#/admin')) return 'admin';
   if (h.startsWith('#/j/')) return 'perfil';
   if (h.startsWith('#/credenciales/')) return 'credenciales';
+  if (h.startsWith('#/cedula/')) return 'cedula';
   if (h.startsWith('#/varonil')) return 'varonil';
   if (h.startsWith('#/femenil')) return 'femenil';
   return 'inicio';
@@ -100,6 +102,7 @@ function render() {
     aviso.textContent = 'Modo demo: los datos se guardan solo en este navegador. Conecta Supabase (ver LEEME) para guardarlos en la nube y publicarlos.';
   } else aviso.hidden = true;
   if (r === 'perfil') { $app.innerHTML = vistaPerfil(decodeURIComponent(location.hash.slice(4))); return; }
+  if (r === 'cedula') { $app.innerHTML = db.esAdmin ? vistaCedula(location.hash.slice('#/cedula/'.length)) : vistaAdmin(); return; }
   if (r === 'credenciales') {
     $app.innerHTML = db.esAdmin ? vistaCredenciales(location.hash.slice('#/credenciales/'.length), st.credTodos) : vistaAdmin();
     return;
@@ -594,7 +597,7 @@ function admResultados(t) {
   const filaPend = p => `<div class="fila entre" style="padding:8px 0;border-bottom:1px solid var(--borde)">
       <div><b>${esc(eq.get(p.local_id)?.nombre)}</b> vs <b>${esc(eq.get(p.visita_id)?.nombre)}</b>
       <div class="muted" style="font-size:13px">Jornada ${p.jornada} · ${p.fecha === hoy ? '<b style="color:var(--verde)">HOY</b>' : fmtFecha(p.fecha)} ${fmtHora(p.hora)}</div></div>
-      <button class="btn" data-act="capturar" data-id="${p.id}">Capturar resultado</button></div>`;
+      <div class="fila"><a class="btn sec" href="#/cedula/${p.id}">📝 Crear cédula</a><button class="btn" data-act="capturar" data-id="${p.id}">Capturar resultado</button></div></div>`;
   const cabPend = lista.length ? `<div class="card"><h2 style="margin-top:0">${porCapturar.length ? `Por capturar (${porCapturar.length})` : 'Próximos juegos'}</h2>${lista.map(filaPend).join('')}</div>` : '';
   const jornadas = [...new Set(ps.map(p => p.jornada))];
   if (!jornadas.includes(st.jornadaAdmin)) st.jornadaAdmin = (pend[0] || ps[ps.length - 1]).jornada;
@@ -611,7 +614,7 @@ function admResultados(t) {
         <span class="marcador">${p.estado === 'jugado' ? `${p.goles_local} – ${p.goles_visita}` : 'vs'}</span>
         <span style="flex:1;min-width:90px">${esc(V?.nombre)}</span></div>
       <div class="muted" style="text-align:center;font-size:13px;margin:4px 0 8px">${fmtFecha(p.fecha)} ${fmtHora(p.hora)} · ${p.estado}${evs.length ? ` · ${goles} goles y ${tarj} tarjetas capturados` : ''}</div>
-      <div class="fila" style="justify-content:center"><button class="btn" data-act="capturar" data-id="${p.id}">${p.estado === 'jugado' ? 'Corregir resultado' : 'Capturar resultado'}</button>
+      <div class="fila" style="justify-content:center">${p.estado === 'jugado' ? '' : `<a class="btn sec" href="#/cedula/${p.id}">📝 Crear cédula</a>`}<button class="btn" data-act="capturar" data-id="${p.id}">${p.estado === 'jugado' ? 'Corregir resultado' : 'Capturar resultado'}</button>
         <button class="btn sec chico" data-act="detalles" data-id="${p.id}">${st.abierto === p.id ? 'Ocultar' : 'Fecha, estado y notas'}</button>
         ${db.rol === 'admin' ? `<button class="btn peligro chico" data-act="borrar-partido" data-id="${p.id}">Borrar</button>` : ''}</div>
       ${st.abierto === p.id ? `<form data-form="resultado" data-id="${p.id}" style="margin-top:10px">
