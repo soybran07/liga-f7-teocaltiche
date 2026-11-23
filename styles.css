@@ -1,35 +1,33 @@
 :root {
-  --bg: #f4f6f3;
-  --panel: #ffffff;
-  --texto: #18211b;
-  --muted: #5f6b63;
-  --borde: #dfe5e0;
-  --verde: #1f7a3f;
-  --verde-2: #e3f2e8;
-  --rojo: #c0392b;
-  --amarillo: #e2b203;
-  --azul: #2563eb;
-  --sombra: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.04);
+  /* Tema "liquid glass" sobre la foto de la cancha */
+  --bg: rgba(255,255,255,.07);
+  --panel: rgba(255,255,255,.12);
+  --texto: #ffffff;
+  --muted: rgba(255,255,255,.74);
+  --borde: rgba(255,255,255,.24);
+  --verde: #2fd38a;
+  --verde-2: rgba(255,255,255,.14);
+  --rojo: #ff6b6b;
+  --amarillo: #f5c518;
+  --azul: #4c8dff;
+  --sombra: 0 8px 32px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.35), inset 0 -1px 0 rgba(255,255,255,.08);
   --c-varonil: #019859;
   --c-femenil: #a769d0;
+  --c-varonil-claro: #3fe39b;
+  --c-femenil-claro: #dcb4ff;
   --rojo-liga: #e8102a;
-  --barra: #15181d;
-  color-scheme: light;
+  --barra: rgba(15,20,26,.35);
+  --tinte: rgba(10,16,22,.45);
+  --glass-blur: blur(18px) saturate(170%);
+  --titulo: "Archivo Black", "Arial Black", system-ui, sans-serif;
+  color-scheme: dark;
 }
-body[data-tema=varonil] { --verde: #01864e; --verde-2: #e1f3e9; --barra: var(--c-varonil); }
-body[data-tema=femenil] { --verde: #8a48ba; --verde-2: #f1e8f8; --barra: var(--c-femenil); }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f1411; --panel: #171e19; --texto: #e7ece8; --muted: #9aa69e;
-    --borde: #2a332d; --verde: #3fb06a; --verde-2: #1c2e22; --sombra: none;
-    color-scheme: dark;
-  }
-  body[data-tema=varonil] { --verde: #3fc07f; --verde-2: #15301f; --barra: #017a47; }
-  body[data-tema=femenil] { --verde: #c49be3; --verde-2: #2a1f33; --barra: #7e47a8; }
-}
+body[data-tema=varonil] { --verde: var(--c-varonil-claro); --verde-2: rgba(1,152,89,.25); --barra: rgba(1,152,89,.55); --panel: rgba(1,152,89,.14); --tinte: rgba(0,40,22,.45); }
+body[data-tema=femenil] { --verde: var(--c-femenil-claro); --verde-2: rgba(167,105,208,.28); --barra: rgba(167,105,208,.6); --panel: rgba(167,105,208,.15); --tinte: rgba(36,12,52,.45); }
 * { box-sizing: border-box; }
 body {
-  margin: 0; background: var(--bg); color: var(--texto);
+  margin: 0; color: var(--texto); min-height: 100vh;
+  background: #0d1a14;
   font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 a { color: var(--verde); }
@@ -56,7 +54,6 @@ a { color: var(--verde); }
 .topnav a.nav-admin:hover, .topnav a.nav-admin.activo { background: rgba(255,255,255,.15); opacity: 1; }
 body[data-tema=varonil] .topnav a.nav-varonil, body[data-tema=femenil] .topnav a.nav-femenil { box-shadow: 0 0 0 2px rgba(255,255,255,.4); }
 .aviso { background: #fff4d6; color: #5c4400; padding: 8px 16px; font-size: 14px; text-align: center; }
-@media (prefers-color-scheme: dark) { .aviso { background: #3a2f0f; color: #f3dc9c; } }
 
 .fila { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .entre { justify-content: space-between; }
@@ -75,7 +72,7 @@ h3 { font-size: 15px; margin: 14px 0 8px; }
 .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 
 .tabla-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; background: var(--panel); }
+table { width: 100%; border-collapse: collapse; background: transparent; }
 th, td { padding: 8px 8px; border-bottom: 1px solid var(--borde); text-align: center; white-space: nowrap; }
 th { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); font-weight: 600; }
 td.izq, th.izq { text-align: left; }
@@ -157,16 +154,15 @@ input.num { width: 64px; text-align: center; }
 .liga-btn { margin-top: 8px; padding: 9px 18px; border-radius: 999px; color: #fff; font-weight: 600; }
 .liga-varonil .liga-btn { background: var(--c-varonil); }
 .liga-femenil .liga-btn { background: var(--c-femenil); }
-.liga-varonil h2 { color: var(--c-varonil); }
-.liga-femenil h2 { color: #8a48ba; }
-@media (prefers-color-scheme: dark) { .liga-femenil h2 { color: #c49be3; } .liga-varonil h2 { color: #3fc07f; } }
+.liga-varonil h2 { color: var(--c-varonil-claro); }
+.liga-femenil h2 { color: var(--c-femenil-claro); }
 .cifras { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; max-width: 360px; margin: 6px 0; }
 .cifras div { display: flex; flex-direction: column; }
 .cifras b { font-size: 22px; font-variant-numeric: tabular-nums; }
 .cifras span { font-size: 11px; color: var(--muted); line-height: 1.2; }
 .info h2 { margin-top: 0; }
 .info p { max-width: 760px; }
-.t-varonil { color: var(--c-varonil); } .t-femenil { color: #8a48ba; }
+.t-varonil { color: var(--c-varonil-claro); } .t-femenil { color: var(--c-femenil-claro); }
 .datos { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 14px; }
 .datos div { display: flex; flex-direction: column; gap: 2px; background: var(--bg); border-radius: 12px; padding: 12px; }
 .datos .ico { font-size: 22px; }
@@ -184,3 +180,79 @@ input.num { width: 64px; text-align: center; }
 a.btn { text-decoration: none; display: inline-block; }
 .proximamente h1 { color: var(--verde); }
 .proximamente p { color: var(--muted); }
+
+/* ================= LIQUID GLASS ================= */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1;
+  background: linear-gradient(180deg, var(--tinte) 0%, rgba(0,0,0,.25) 40%, rgba(0,0,0,.6) 100%),
+              url("img/cancha.jpg") center 60% / cover no-repeat;
+  transition: background .4s;
+}
+.card, .liga-card, .tabs button, .topbar, .toast, .aviso, .datos div, input, select, textarea, .btn.sec, .marcador {
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+}
+.card, .liga-card {
+  background: linear-gradient(135deg, rgba(255,255,255,.18), rgba(255,255,255,.06)) , var(--panel);
+  border: 1px solid var(--borde); border-radius: 22px; box-shadow: var(--sombra);
+}
+.liga-card { border-width: 1px; }
+.topbar { background: var(--barra); border-bottom: 1px solid rgba(255,255,255,.25); box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+.topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--rojo-liga); opacity: .85; }
+.aviso { background: rgba(245,197,24,.22); color: #fff; border-bottom: 1px solid rgba(255,255,255,.2); }
+.tabs button { background: rgba(255,255,255,.12); border-color: var(--borde); color: #fff; }
+.tabs button:hover { background: rgba(255,255,255,.22); }
+.tabs button.activo { background: rgba(255,255,255,.92); color: #0f1a14; border-color: #fff; }
+body[data-tema=varonil] .tabs button.activo { background: var(--c-varonil); color: #fff; }
+body[data-tema=femenil] .tabs button.activo { background: var(--c-femenil); color: #fff; }
+th { color: rgba(255,255,255,.7); }
+th, td { border-bottom-color: rgba(255,255,255,.14); }
+tbody tr:hover { background: rgba(255,255,255,.08); }
+.marcador { background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.25); }
+.marcador.pend { color: rgba(255,255,255,.8); border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.06); }
+.partido { border-bottom-color: rgba(255,255,255,.14); }
+.badge { background: rgba(255,255,255,.18); color: #fff; }
+input, select, textarea { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.28); color: #fff; }
+input::placeholder, textarea::placeholder { color: rgba(255,255,255,.5); }
+input:focus, select:focus, textarea:focus { outline: 2px solid rgba(255,255,255,.55); outline-offset: 1px; }
+select option, select optgroup { background: #1b2620; color: #fff; }
+input[type=date]::-webkit-calendar-picker-indicator, input[type=time]::-webkit-calendar-picker-indicator { filter: invert(1); }
+label { color: rgba(255,255,255,.78); }
+.btn { background: rgba(255,255,255,.92); color: #0f1a14; border-color: #fff; font-weight: 600; }
+body[data-tema=varonil] .btn { background: var(--c-varonil); color: #fff; border-color: rgba(255,255,255,.5); }
+body[data-tema=femenil] .btn { background: var(--c-femenil); color: #fff; border-color: rgba(255,255,255,.5); }
+.btn.sec, body[data-tema] .btn.sec { background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.4); }
+.btn.peligro, body[data-tema] .btn.peligro { background: rgba(255,80,80,.12); color: #ffb3b3; border-color: rgba(255,120,120,.6); }
+.chips label { border-color: rgba(255,255,255,.3); color: #fff; background: rgba(255,255,255,.08); }
+.toast { background: rgba(20,26,22,.7); border: 1px solid rgba(255,255,255,.25); }
+.toast.error { background: rgba(192,57,43,.85); }
+.pie { color: rgba(255,255,255,.7); text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.vacio { color: rgba(255,255,255,.8); }
+a { color: var(--verde); }
+
+/* Portada */
+.hero { padding: 44px 8px 12px; text-shadow: 0 2px 18px rgba(0,0,0,.55); }
+.hero-pre { color: #fff; opacity: .9; font-size: 11px; letter-spacing: .14em; }
+.hero h1 {
+  font-family: var(--titulo); font-weight: 400; text-transform: uppercase;
+  font-size: clamp(34px, 7.4vw, 72px); line-height: 1.02; letter-spacing: .01em; margin: 10px 0 14px;
+}
+.hero h1 .hero-f7 { color: #fff; -webkit-text-stroke: 0; background: linear-gradient(90deg, #4cf0a6, #c9f7e2 45%, #f0dcff 55%, #d9a8ff); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.hero-sub { color: rgba(255,255,255,.88); }
+.liga-card h2, .liga-cab h1, .proximamente h1, .info h2 { font-family: var(--titulo); font-weight: 400; text-transform: uppercase; letter-spacing: .02em; }
+.liga-card h2 { font-size: 22px; }
+.liga-card img { filter: drop-shadow(0 10px 24px rgba(0,0,0,.45)); }
+.liga-varonil:hover { border-color: var(--c-varonil-claro); box-shadow: 0 14px 40px rgba(1,152,89,.45), inset 0 1px 0 rgba(255,255,255,.4); background: linear-gradient(135deg, rgba(1,152,89,.45), rgba(1,152,89,.15)); }
+.liga-femenil:hover { border-color: var(--c-femenil-claro); box-shadow: 0 14px 40px rgba(167,105,208,.5), inset 0 1px 0 rgba(255,255,255,.4); background: linear-gradient(135deg, rgba(167,105,208,.5), rgba(167,105,208,.18)); }
+.cifras span { color: rgba(255,255,255,.72); }
+.info { text-align: center; }
+.info p { margin-left: auto; margin-right: auto; }
+.info h2 { font-size: 24px; }
+.datos div { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16); align-items: center; text-align: center; border-radius: 16px; }
+.datos span:last-child { color: rgba(255,255,255,.78); }
+.liga-cab { text-shadow: 0 2px 12px rgba(0,0,0,.5); }
+.liga-cab img { filter: drop-shadow(0 6px 14px rgba(0,0,0,.45)); }
+.liga-cab .muted { color: rgba(255,255,255,.85); }
+.liga-cab .hero-pre { color: var(--verde); opacity: 1; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .card, .liga-card { background: rgba(20,30,25,.82); }
+}

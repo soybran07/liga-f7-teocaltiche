@@ -137,7 +137,7 @@ function vistaInicio() {
   };
   return `<section class="hero">
       <p class="hero-pre">Dirección de Ligas Juveniles · Teocaltiche, Jalisco</p>
-      <h1>Bienvenido a la Liga Fútbol 7</h1>
+      <h1>Bienvenido a la <span class="hero-f7">Liga Fútbol&nbsp;7</span></h1>
       <p class="hero-sub">Las ligas juveniles municipales de fútbol rápido de Teocaltiche. Aquí encuentras el calendario, los resultados, la tabla de posiciones y el goleo de cada liga, siempre al día.</p>
     </section>
     <section class="ligas">${tarjetaLiga('varonil')}${tarjetaLiga('femenil')}</section>
