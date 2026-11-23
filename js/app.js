@@ -627,7 +627,7 @@ window.addEventListener('hashchange', render);
 
 // ---------- arranque ----------
 document.getElementById('nombre-liga').textContent = NOMBRE_LIGA;
-iniciar().then(render).catch(e => {
+iniciar().then(render).finally(() => window.dispatchEvent(new Event('f7:listo'))).catch(e => {
   console.error(e);
   $app.innerHTML = `<div class="card"><h1>No se pudo conectar</h1><p>${esc(e.message)}</p><p class="muted">Revisa js/config.js y que hayas corrido supabase/schema.sql.</p></div>`;
 });

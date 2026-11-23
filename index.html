@@ -13,6 +13,36 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <div id="intro" class="intro" role="status" aria-label="Cargando la Liga Fútbol 7">
+    <div class="intro-escena">
+      <div class="intro-porteria">
+        <svg class="intro-red" viewBox="0 0 300 120" preserveAspectRatio="none" aria-hidden="true">
+          <defs><pattern id="malla" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M0 0 L10 10 M10 0 L0 10" stroke="rgba(255,255,255,.55)" stroke-width="1"/></pattern></defs>
+          <polygon points="18,14 282,14 270,118 30,118" fill="url(#malla)"/>
+        </svg>
+        <div class="intro-poste izq"></div><div class="intro-poste der"></div><div class="intro-travesano"></div>
+      </div>
+      <div class="intro-sombra"></div>
+      <div class="intro-balon">
+        <svg viewBox="-50 -50 100 100" width="100%" height="100%" aria-hidden="true">
+          <defs><radialGradient id="bsh" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#fff"/><stop offset=".65" stop-color="#e9eef0"/><stop offset="1" stop-color="#9aa4aa"/></radialGradient>
+          <clipPath id="bclip"><circle r="48"/></clipPath></defs>
+          <circle r="48" fill="url(#bsh)"/>
+          <g clip-path="url(#bclip)" fill="#111" stroke="#111" stroke-width="2" stroke-linejoin="round">
+            <polygon points="0,-16 15.2,-4.9 9.4,12.9 -9.4,12.9 -15.2,-4.9"/>
+            <g id="bp"><polygon points="0,-36 12,-45 8,-58 -8,-58 -12,-45"/><line x1="0" y1="-16" x2="0" y2="-36"/></g>
+            <use href="#bp" transform="rotate(72)"/><use href="#bp" transform="rotate(144)"/><use href="#bp" transform="rotate(216)"/><use href="#bp" transform="rotate(288)"/>
+          </g>
+          <circle r="48" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="1.5"/>
+        </svg>
+      </div>
+    </div>
+    <div class="intro-flash"></div>
+    <img class="intro-logo" src="img/logo-varonil.png" alt="">
+    <img class="intro-logo" src="img/logo-femenil.png" alt="">
+    <div class="intro-texto"><b>Liga Fútbol 7</b><span>Teocaltiche, Jalisco</span></div>
+    <button class="intro-saltar" type="button">Saltar ›</button>
+  </div>
   <header class="topbar">
     <a href="#/" class="marca" data-nav="inicio"><span class="marca-logos"><img src="img/logo-varonil.png" alt=""><img src="img/logo-femenil.png" alt=""></span><span id="nombre-liga">Liga Fútbol 7 Teocaltiche</span></a>
     <nav class="topnav">
@@ -25,6 +55,7 @@
   <main id="app" class="contenedor"><p class="muted">Cargando…</p></main>
   <footer class="pie contenedor muted">Dirección de Ligas Juveniles · Liga Fútbol 7 · Teocaltiche, Jalisco</footer>
   <div id="toast" class="toast" hidden></div>
+  <script type="module" src="js/intro.js"></script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>
