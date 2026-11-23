@@ -2,6 +2,7 @@ import { db, iniciar, insertar, actualizar, borrar, entrar, salir, exportarJSON,
 import { todosContraTodos, unirGrupos, calendarizar } from './roundrobin.js';
 import { tablaPosiciones, tablaGoleo, tablaDisciplina } from './stats.js';
 import { NOMBRE_LIGA } from './config.js';
+import { revisarJugador, fechaDeCurp } from './validar.js';
 
 const $app = document.getElementById('app');
 const PREF = 'f7teo-pref-v1';
@@ -13,6 +14,7 @@ const st = {
   jornadaAdmin: null,
   abierto: null,          // partido con detalles abiertos
   equipoAbierto: null,    // equipo con plantilla abierta
+  jugadorEditando: null,  // jugador en edición
   vistaPrevia: null,      // partidos generados sin guardar
 };
 const guardarPref = () => { try { localStorage.setItem(PREF, JSON.stringify({ torneoId: st.torneoId })); } catch { } };
@@ -235,10 +237,8 @@ function admEquipos(t) {
       <button class="btn sec chico" type="button" data-act="plantilla" data-id="${e.id}">${abierto ? 'Ocultar' : 'Ver'} jugadores (${js.length})</button>
       <button class="btn peligro chico" type="button" data-act="borrar-equipo" data-id="${e.id}">Borrar equipo</button></div></form>
       ${abierto ? `<h3>Jugadores</h3>
-        ${js.length ? `<div class="tabla-wrap"><table><thead><tr><th>Núm.</th><th class="izq">Nombre</th><th class="izq">CURP (privado)</th><th>Nacimiento (privado)</th><th>Activo</th><th></th></tr></thead><tbody>
-        ${js.map(j => { const p = priv.get(j.id) || {}; return `<tr><td>${j.numero ?? ''}</td><td class="izq">${esc(j.nombre)}</td><td class="izq">${esc(p.curp || '')}</td><td>${esc(p.fecha_nac || '')}</td>
-          <td><input type="checkbox" data-act="activo-jugador" data-id="${j.id}" ${j.activo !== false ? 'checked' : ''}></td>
-          <td><button class="btn peligro chico" data-act="borrar-jugador" data-id="${j.id}">Quitar</button></td></tr>`; }).join('')}
+        ${js.length ? `<div class="tabla-wrap"><table><thead><tr><th>Núm.</th><th class="izq">Nombre</th><th class="izq">CURP (privado)</th><th>Nacimiento (privado)</th><th class="izq">Revisión</th><th>Activo</th><th></th></tr></thead><tbody>
+        ${js.map(j => filaJugador(j, priv.get(j.id) || {}, t)).join('')}
         </tbody></table></div>` : '<p class="muted">Sin jugadores todavía.</p>'}
         <form data-form="jugador" data-equipo="${e.id}" style="margin-top:10px"><div class="form-grid">
           <div class="campo"><label>Nombre completo</label><input name="nombre" required></div>
@@ -259,7 +259,39 @@ function admEquipos(t) {
       <div class="campo"><label>Delegado</label><input name="delegado"></div>
       <div class="campo"><label>Teléfono</label><input name="telefono"></div>
     </div><button class="btn" type="submit">Agregar equipo</button></form></div>
+    ${resumenRevision(t, eqs, priv)}
     <p class="muted">${eqs.length} equipos. La CURP y la fecha de nacimiento solo las ve el administrador; nunca aparecen en la página pública.</p>${tarjetas}`;
+}
+
+function filaJugador(j, p, t) {
+  if (st.jugadorEditando === j.id) {
+    const f = `form="ej-${j.id}"`;
+    return `<tr><td><input ${f} class="num" name="numero" type="number" min="0" value="${j.numero ?? ''}"></td>
+      <td class="izq"><input ${f} name="nombre" required value="${esc(j.nombre)}" style="min-width:180px"></td>
+      <td class="izq"><input ${f} name="curp" maxlength="18" value="${esc(p.curp || '')}" style="text-transform:uppercase;min-width:190px"></td>
+      <td><input ${f} name="fecha_nac" type="date" value="${esc(p.fecha_nac || '')}"></td>
+      <td class="izq muted" style="white-space:normal;font-size:12px">Si dejas la fecha vacía se toma la de la CURP.</td>
+      <td></td>
+      <td><form id="ej-${j.id}" data-form="jugador-editar" data-id="${j.id}" class="fila" style="flex-wrap:nowrap">
+        <button class="btn chico" type="submit">Guardar</button><button class="btn sec chico" type="button" data-act="editar-jugador" data-id="">Cancelar</button></form></td></tr>`;
+  }
+  const avisos = revisarJugador(p, t.categoria);
+  return `<tr><td>${j.numero ?? ''}</td><td class="izq">${esc(j.nombre)}</td><td class="izq">${esc(p.curp || '')}</td><td>${esc(p.fecha_nac || '')}</td>
+    <td class="izq" style="white-space:normal;font-size:12px;${avisos.length ? 'color:var(--rojo)' : 'color:var(--verde)'}">${avisos.length ? avisos.map(esc).join('<br>') : '✓ OK'}</td>
+    <td><input type="checkbox" data-act="activo-jugador" data-id="${j.id}" ${j.activo !== false ? 'checked' : ''}></td>
+    <td class="fila" style="flex-wrap:nowrap"><button class="btn sec chico" data-act="editar-jugador" data-id="${j.id}">Editar</button>
+    <button class="btn peligro chico" data-act="borrar-jugador" data-id="${j.id}">Quitar</button></td></tr>`;
+}
+
+function resumenRevision(t, eqs, priv) {
+  const problemas = eqs.flatMap(e => jugadoresDe(e.id).filter(j => j.activo !== false).map(j => ({ e, j, avisos: revisarJugador(priv.get(j.id) || {}, t.categoria) })))
+    .filter(x => x.avisos.length);
+  if (!problemas.length) return '';
+  return `<div class="card" style="border-color:var(--rojo)"><h2 style="margin-top:0">Revisión de edades y CURP: ${problemas.length} jugador${problemas.length === 1 ? '' : 'es'} con avisos</h2>
+    <div class="tabla-wrap"><table><tbody>${problemas.map(x => `<tr><td class="izq">${esc(x.j.nombre)}</td><td class="izq muted">${esc(x.e.nombre)}</td>
+      <td class="izq" style="white-space:normal;color:var(--rojo);font-size:13px">${x.avisos.map(esc).join(' · ')}</td>
+      <td><button class="btn sec chico" data-act="ir-jugador" data-id="${x.j.id}" data-equipo="${x.e.id}">Corregir</button></td></tr>`).join('')}</tbody></table></div>
+    <p class="muted" style="font-size:13px">Verifica con la consulta gratuita de CURP en gob.mx o con el acta de nacimiento.</p></div>`;
 }
 
 // ----- Generar jornadas -----
@@ -392,6 +424,9 @@ $app.addEventListener('click', ev => {
       seguro(async () => { await borrar('torneos', id); st.torneoId = null; toast('Torneo borrado'); }),
     plantilla: () => { st.equipoAbierto = st.equipoAbierto === id ? null : id; render(); },
     'borrar-equipo': () => confirm('¿Borrar el equipo, sus jugadores y sus partidos?') && seguro(async () => { await borrar('equipos', id); toast('Equipo borrado'); }),
+    'editar-jugador': () => { st.jugadorEditando = id || null; render(); },
+    'ir-jugador': () => { st.equipoAbierto = b.dataset.equipo; st.jugadorEditando = id; render();
+      document.getElementById('ej-' + id)?.closest('tr')?.scrollIntoView({ block: 'center' }); },
     'borrar-jugador': () => confirm('¿Quitar a este jugador? También se borran sus goles y tarjetas.') && seguro(() => borrar('jugadores', id)),
     'activo-jugador': () => seguro(() => actualizar('jugadores', id, { activo: b.checked })),
     'guardar-jornadas': () => seguro(async () => {
@@ -455,8 +490,17 @@ $app.addEventListener('submit', ev => {
     }),
     jugador: () => seguro(async () => {
       const [j] = await insertar('jugadores', { equipo_id: f.dataset.equipo, nombre: d.nombre.trim(), numero: numONull(d.numero), activo: true });
-      await guardarPrivado(j.id, { curp: (d.curp || '').trim().toUpperCase(), fecha_nac: d.fecha_nac });
+      const curp = (d.curp || '').trim().toUpperCase();
+      await guardarPrivado(j.id, { curp, fecha_nac: d.fecha_nac || fechaDeCurp(curp) || '' });
       toast('Jugador agregado');
+    }),
+    'jugador-editar': () => seguro(async () => {
+      const id = f.dataset.id;
+      const v = Object.fromEntries([...document.querySelectorAll(`[form="ej-${id}"]`)].map(el => [el.name, el.value]));
+      const curp = (v.curp || '').trim().toUpperCase();
+      await actualizar('jugadores', id, { nombre: v.nombre.trim(), numero: numONull(v.numero) });
+      await guardarPrivado(id, { curp, fecha_nac: v.fecha_nac || fechaDeCurp(curp) || '' });
+      st.jugadorEditando = null; toast('Jugador actualizado');
     }),
     'jugadores-lote': () => seguro(async () => {
       const filas = d.lista.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
