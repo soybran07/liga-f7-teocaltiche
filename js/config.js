@@ -8,4 +8,4 @@ export const SUPABASE_URL = 'https://eqqrsnsnfhtooahdznxk.supabase.co';
 export const SUPABASE_ANON_KEY = 'sb_publishable_xWEJCCXEDlTsQrEtAOLWXA_QzxRKmUJ';
 
 // Nombre que aparece arriba en la página.
-export const NOMBRE_LIGA = 'Fútbol 7 Municipal Teocaltiche';
+export const NOMBRE_LIGA = 'Liga Fútbol 7 Teocaltiche';

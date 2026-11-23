@@ -10,14 +10,22 @@
   --amarillo: #e2b203;
   --azul: #2563eb;
   --sombra: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.04);
+  --c-varonil: #019859;
+  --c-femenil: #a769d0;
+  --rojo-liga: #e8102a;
+  --barra: #15181d;
   color-scheme: light;
 }
+body[data-tema=varonil] { --verde: #01864e; --verde-2: #e1f3e9; --barra: var(--c-varonil); }
+body[data-tema=femenil] { --verde: #8a48ba; --verde-2: #f1e8f8; --barra: var(--c-femenil); }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0f1411; --panel: #171e19; --texto: #e7ece8; --muted: #9aa69e;
     --borde: #2a332d; --verde: #3fb06a; --verde-2: #1c2e22; --sombra: none;
     color-scheme: dark;
   }
+  body[data-tema=varonil] { --verde: #3fc07f; --verde-2: #15301f; --barra: #017a47; }
+  body[data-tema=femenil] { --verde: #c49be3; --verde-2: #2a1f33; --barra: #7e47a8; }
 }
 * { box-sizing: border-box; }
 body {
@@ -28,12 +36,25 @@ a { color: var(--verde); }
 .contenedor { max-width: 1040px; margin: 0 auto; padding: 16px; }
 .muted { color: var(--muted); }
 .topbar {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 12px 16px; background: var(--verde); color: #fff;
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 10px 16px; background: var(--barra); color: #fff; border-bottom: 3px solid var(--rojo-liga);
+  transition: background .25s;
 }
-.marca { color: #fff; text-decoration: none; font-weight: 700; font-size: 17px; }
-.topnav a { color: #fff; text-decoration: none; margin-left: 14px; opacity: .8; }
-.topnav a.activo { opacity: 1; font-weight: 600; border-bottom: 2px solid #fff; }
+.marca { color: #fff; text-decoration: none; font-weight: 700; font-size: 17px; display: inline-flex; align-items: center; gap: 10px; }
+.marca-logos { display: inline-flex; }
+.marca-logos img { width: 34px; height: 34px; border-radius: 50%; background: #fff; }
+.marca-logos img + img { margin-left: -10px; }
+.topnav { display: flex; gap: 6px; flex-wrap: wrap; }
+.topnav a {
+  color: #fff; text-decoration: none; padding: 7px 14px; border-radius: 999px; font-weight: 600; font-size: 14px;
+  border: 1px solid rgba(255,255,255,.35); transition: background .2s, border-color .2s, color .2s;
+}
+.topnav a.nav-varonil:hover, body[data-tema=varonil] .topnav a.nav-varonil { background: var(--c-varonil); border-color: #fff; }
+.topnav a.nav-femenil:hover, body[data-tema=femenil] .topnav a.nav-femenil { background: var(--c-femenil); border-color: #fff; }
+.topnav a.nav-admin { border-color: transparent; opacity: .85; }
+.topnav a.nav-admin:hover, .topnav a.nav-admin.activo { background: rgba(255,255,255,.15); opacity: 1; }
+body[data-tema=varonil] .topnav a.nav-varonil, body[data-tema=femenil] .topnav a.nav-femenil { box-shadow: 0 0 0 2px rgba(255,255,255,.4); }
 .aviso { background: #fff4d6; color: #5c4400; padding: 8px 16px; font-size: 14px; text-align: center; }
 @media (prefers-color-scheme: dark) { .aviso { background: #3a2f0f; color: #f3dc9c; } }
 
@@ -113,5 +134,53 @@ input.num { width: 64px; text-align: center; }
 
 @media (max-width: 560px) {
   .partido { grid-template-columns: 1fr auto 1fr; gap: 6px; font-size: 14px; }
-  .topnav a { margin-left: 10px; }
 }
+
+/* ---------- Portada ---------- */
+.hero { text-align: center; padding: 28px 8px 8px; }
+.hero h1 { font-size: clamp(28px, 6vw, 46px); line-height: 1.1; margin: 6px 0 12px; letter-spacing: -.01em; }
+.hero-pre { color: var(--rojo-liga); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; margin: 0; }
+.hero-sub { max-width: 640px; margin: 0 auto; color: var(--muted); font-size: 16px; }
+.ligas { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); margin: 26px 0 18px; }
+.liga-card {
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px;
+  background: var(--panel); border: 2px solid var(--borde); border-radius: 18px; padding: 22px 16px;
+  text-decoration: none; color: var(--texto); box-shadow: var(--sombra);
+  transition: transform .2s, border-color .2s, box-shadow .2s, background .2s;
+}
+.liga-card img { width: min(220px, 60vw); height: auto; transition: transform .3s; }
+.liga-card h2 { margin: 6px 0 4px; font-size: 22px; }
+.liga-card:hover { transform: translateY(-4px); }
+.liga-card:hover img { transform: rotate(-4deg) scale(1.03); }
+.liga-varonil:hover { border-color: var(--c-varonil); box-shadow: 0 10px 28px rgba(1,152,89,.22); background: linear-gradient(180deg, rgba(1,152,89,.08), transparent 60%), var(--panel); }
+.liga-femenil:hover { border-color: var(--c-femenil); box-shadow: 0 10px 28px rgba(167,105,208,.25); background: linear-gradient(180deg, rgba(167,105,208,.10), transparent 60%), var(--panel); }
+.liga-btn { margin-top: 8px; padding: 9px 18px; border-radius: 999px; color: #fff; font-weight: 600; }
+.liga-varonil .liga-btn { background: var(--c-varonil); }
+.liga-femenil .liga-btn { background: var(--c-femenil); }
+.liga-varonil h2 { color: var(--c-varonil); }
+.liga-femenil h2 { color: #8a48ba; }
+@media (prefers-color-scheme: dark) { .liga-femenil h2 { color: #c49be3; } .liga-varonil h2 { color: #3fc07f; } }
+.cifras { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; max-width: 360px; margin: 6px 0; }
+.cifras div { display: flex; flex-direction: column; }
+.cifras b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.cifras span { font-size: 11px; color: var(--muted); line-height: 1.2; }
+.info h2 { margin-top: 0; }
+.info p { max-width: 760px; }
+.t-varonil { color: var(--c-varonil); } .t-femenil { color: #8a48ba; }
+.datos { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 14px; }
+.datos div { display: flex; flex-direction: column; gap: 2px; background: var(--bg); border-radius: 12px; padding: 12px; }
+.datos .ico { font-size: 22px; }
+.datos span:last-child { color: var(--muted); font-size: 14px; }
+.liga-cab { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 4px; }
+.liga-cab img { border-radius: 50%; }
+.liga-cab h1 { margin: 2px 0 4px; }
+.proximamente img { display: block; margin: 0 auto 8px; }
+.proximamente h1 { margin-bottom: 6px; }
+@media (max-width: 560px) {
+  .marca { font-size: 15px; }
+  .topnav { width: 100%; }
+  .topnav a { padding: 6px 10px; font-size: 13px; }
+}
+a.btn { text-decoration: none; display: inline-block; }
+.proximamente h1 { color: var(--verde); }
+.proximamente p { color: var(--muted); }

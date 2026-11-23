@@ -48,7 +48,13 @@ const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String
 
 // ---------- selectores de datos ----------
 const D = () => db.data;
-const torneo = () => D().torneos.find(t => t.id === st.torneoId) || D().torneos[0] || null;
+const ramaDe = t => (/femen/i.test(`${t.nombre} ${t.categoria || ''}`) ? 'femenil' : 'varonil');
+const torneosDe = rama => D().torneos.filter(t => !rama || ramaDe(t) === rama);
+// Torneo seleccionado, limitado a la rama (varonil/femenil) que se está viendo.
+const torneo = (rama = st.rama) => {
+  const ts = torneosDe(rama);
+  return ts.find(t => t.id === st.torneoId) || ts[0] || null;
+};
 const equiposDe = tid => D().equipos.filter(e => e.torneo_id === tid).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 const partidosDe = tid => D().partidos.filter(p => p.torneo_id === tid)
   .sort((a, b) => a.jornada - b.jornada || String(a.fecha || '9').localeCompare(String(b.fecha || '9')) || String(a.hora || '').localeCompare(String(b.hora || '')));
@@ -62,21 +68,32 @@ function eventosDeTorneo(tid) {
 const grupos = eqs => [...new Set(eqs.map(e => (e.grupo || '').trim()).filter(Boolean))].sort();
 
 // ---------- render principal ----------
+function ruta() {
+  const h = location.hash;
+  if (h.startsWith('#/admin')) return 'admin';
+  if (h.startsWith('#/varonil')) return 'varonil';
+  if (h.startsWith('#/femenil')) return 'femenil';
+  return 'inicio';
+}
+
 function render() {
+  const r = ruta();
+  st.rama = r === 'varonil' || r === 'femenil' ? r : null;
   const t = torneo();
   if (t) st.torneoId = t.id;
-  const admin = location.hash.startsWith('#/admin');
-  document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('activo', (a.dataset.nav === 'admin') === admin));
+  document.body.dataset.tema = st.rama || (r === 'admin' ? 'admin' : 'inicio');
+  document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('activo', a.dataset.nav === r));
   const aviso = document.getElementById('aviso');
   if (db.modo === 'demo') {
     aviso.hidden = false;
     aviso.textContent = 'Modo demo: los datos se guardan solo en este navegador. Conecta Supabase (ver LEEME) para guardarlos en la nube y publicarlos.';
   } else aviso.hidden = true;
-  $app.innerHTML = admin ? vistaAdmin() : vistaPublica();
+  $app.innerHTML = r === 'admin' ? vistaAdmin() : r === 'inicio' ? vistaInicio() : vistaPublica();
+  window.scrollTo?.(0, 0);
 }
 
 function selectorTorneo() {
-  const ts = D().torneos;
+  const ts = torneosDe(st.rama);
   if (ts.length < 2) return '';
   return `<select data-cambio="torneo" style="max-width:320px">${ts.map(t =>
     `<option value="${t.id}" ${t.id === st.torneoId ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select>`;
@@ -88,10 +105,61 @@ function tabs(lista, actual, clave) {
 }
 
 // ================= VISTA PÚBLICA =================
+const LIGAS = {
+  varonil: { nombre: 'Liga Juvenil Varonil', logo: 'img/logo-varonil.png' },
+  femenil: { nombre: 'Liga Juvenil Femenil', logo: 'img/logo-femenil.png' },
+};
+
+function cifrasDe(rama) {
+  const ts = new Set(torneosDe(rama).filter(t => t.activo !== false).map(t => t.id));
+  const eqs = D().equipos.filter(e => ts.has(e.torneo_id));
+  const eqIds = new Set(eqs.map(e => e.id));
+  const ps = D().partidos.filter(p => ts.has(p.torneo_id));
+  const psIds = new Set(ps.map(p => p.id));
+  return {
+    equipos: eqs.length,
+    jugadores: D().jugadores.filter(j => eqIds.has(j.equipo_id) && j.activo !== false).length,
+    jugados: ps.filter(p => p.estado === 'jugado').length,
+    goles: D().eventos.filter(e => e.tipo === 'gol' && psIds.has(e.partido_id)).length,
+  };
+}
+
+function vistaInicio() {
+  const tarjetaLiga = rama => {
+    const L = LIGAS[rama], c = cifrasDe(rama), hay = torneosDe(rama).length > 0;
+    return `<a class="liga-card liga-${rama}" href="#/${rama}">
+      <img src="${L.logo}" alt="Logo ${L.nombre}" width="220" height="220">
+      <h2>${L.nombre}</h2>
+      ${hay ? `<div class="cifras"><div><b>${c.equipos}</b><span>equipos</span></div><div><b>${c.jugadores}</b><span>jugadores</span></div>
+        <div><b>${c.jugados}</b><span>partidos jugados</span></div><div><b>${c.goles}</b><span>goles</span></div></div>`
+        : `<p class="muted">Muy pronto: inscripciones y calendario.</p>`}
+      <span class="liga-btn">Ver estadísticas →</span></a>`;
+  };
+  return `<section class="hero">
+      <p class="hero-pre">Dirección de Ligas Juveniles · Teocaltiche, Jalisco</p>
+      <h1>Bienvenido a la Liga Fútbol 7</h1>
+      <p class="hero-sub">Las ligas juveniles municipales de fútbol rápido de Teocaltiche. Aquí encuentras el calendario, los resultados, la tabla de posiciones y el goleo de cada liga, siempre al día.</p>
+    </section>
+    <section class="ligas">${tarjetaLiga('varonil')}${tarjetaLiga('femenil')}</section>
+    <section class="card info">
+      <h2>¿Qué es la Liga F7?</h2>
+      <p>La Liga Juvenil de Fútbol 7 es un espacio deportivo comunitario de Teocaltiche para adolescentes y jóvenes de <b>11 a 17 años</b>. Nació para promover la convivencia sana, la actividad física y el juego limpio, y para alejar a los jóvenes de las adicciones y la violencia.</p>
+      <p>La temporada 2026–2027 es la primera tras el re-empastado de la cancha, con dos ligas: la <b class="t-varonil">varonil</b> y la <b class="t-femenil">femenil</b>.</p>
+      <div class="datos">
+        <div><span class="ico">📍</span><b>Sede</b><span>Cancha de Fútbol 7 Lomas<br>Loma Bonita 728, Teocaltiche</span></div>
+        <div><span class="ico">🗓️</span><b>Días de juego</b><span>Lunes y martes<br>7:00 a 10:00 pm</span></div>
+        <div><span class="ico">⏱️</span><b>Partidos</b><span>Dos tiempos de 25 minutos<br>7 por lado (6 + portero)</span></div>
+        <div><span class="ico">🛡️</span><b>Requisitos</b><span>Espinilleras desde el primer partido<br>Uniforme desde la jornada 5</span></div>
+      </div>
+    </section>`;
+}
+
 function vistaPublica() {
   const t = torneo();
-  if (!t) return `<div class="card vacio">Todavía no hay torneos. Entra a <a href="#/admin">Administrar</a> para crear el primero.</div>`;
-  const cab = `<div class="fila entre"><div><h1>${esc(t.nombre)}</h1>
+  const L = LIGAS[st.rama];
+  if (!t) return `<div class="card vacio proximamente"><img src="${L.logo}" alt="" width="160" height="160"><h1>${L.nombre}</h1>
+    <p>Muy pronto publicaremos aquí el calendario, la tabla y el goleo de esta liga.</p><a class="btn" href="#/">Volver al inicio</a></div>`;
+  const cab = `<div class="liga-cab"><img src="${L.logo}" alt="" width="72" height="72"><div style="flex:1;min-width:200px"><div class="hero-pre">${L.nombre}</div><h1>${esc(t.nombre)}</h1>
     <div class="muted">${[t.categoria, t.temporada, t.sede].filter(Boolean).map(esc).join(' · ')}</div></div>${selectorTorneo()}</div>`;
   const pestañas = tabs([['calendario', 'Calendario'], ['tabla', 'Tabla'], ['goleo', 'Goleo'], ['disciplina', 'Disciplina'], ['equipos', 'Equipos']], st.tabPub, 'tabPub');
   const cuerpo = { calendario: pubCalendario, tabla: pubTabla, goleo: pubGoleo, disciplina: pubDisciplina, equipos: pubEquipos }[st.tabPub](t);
@@ -198,7 +266,7 @@ function vistaAdmin() {
 function formTorneo(t = {}) {
   const v = k => esc(t[k] ?? '');
   return `<form data-form="torneo" data-id="${t.id || ''}"><div class="form-grid">
-    <div class="campo" style="grid-column:1/-1"><label>Nombre del torneo</label><input name="nombre" required value="${v('nombre')}" placeholder="Ej. Liga Libre F7 – Clausura 2027"></div>
+    <div class="campo" style="grid-column:1/-1"><label>Nombre del torneo (si dice "Femenil", sale en la pestaña Fútbol femenil; si no, en Fútbol varonil)</label><input name="nombre" required value="${v('nombre')}" placeholder="Ej. Liga Juvenil Femenil – Apertura 2026"></div>
     <div class="campo"><label>Categoría</label><input name="categoria" value="${v('categoria')}" placeholder="Juvenil, Libre, Veteranos…"></div>
     <div class="campo"><label>Temporada</label><input name="temporada" value="${v('temporada')}" placeholder="2026-2027"></div>
     <div class="campo"><label>Sede</label><input name="sede" value="${v('sede')}" placeholder="Cancha F7 Lomas"></div>
