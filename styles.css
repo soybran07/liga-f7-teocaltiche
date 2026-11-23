@@ -424,3 +424,12 @@ a { color: var(--verde); }
   .hoja-pag { box-shadow: none; break-after: page; page-break-after: always; }
   .hoja-pag:last-child { break-after: auto; page-break-after: auto; }
 }
+
+/* ---------- Tarjeta de equipo desplegable ---------- */
+.eq-cab { all: unset; box-sizing: border-box; width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; cursor: pointer; padding: 2px 0 4px; }
+.eq-cab .eq-titulo { margin: 0; }
+.eq-cab:hover .eq-titulo { text-decoration: underline; text-underline-offset: 4px; }
+.eq-cab:focus-visible { outline: 2px solid #fff; outline-offset: 4px; border-radius: 6px; }
+.eq-info { white-space: nowrap; font-size: 14px; }
+.eq-flecha { display: inline-block; margin-left: 6px; font-size: 12px; }
+.eq-card:not(.abierto) { padding-bottom: 8px; }

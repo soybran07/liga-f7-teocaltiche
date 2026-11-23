@@ -328,13 +328,15 @@ function admEquipos(t) {
     const abierto = st.equipoAbierto === e.id;
     const js = jugadoresDe(e.id);
     const esAdm = db.rol === 'admin';
-    const botones = `<button class="btn sec chico" type="button" data-act="plantilla" data-id="${e.id}">${abierto ? 'Ocultar' : 'Ver'} jugadores (${js.length})</button>
-      ${db.faltaMigracion ? '' : `<button class="btn sec chico" type="button" data-act="pagos-equipo" data-id="${e.id}">Fianza y pagos del equipo</button>
+    const botones = `${db.faltaMigracion ? '' : `<button class="btn sec chico" type="button" data-act="pagos-equipo" data-id="${e.id}">Fianza y pagos del equipo</button>
       <a class="btn sec chico" href="#/credenciales/${e.id}">🪪 Credenciales</a>`}
       ${esAdm && db.modo === 'supabase' ? `<button class="btn sec chico" type="button" data-act="usuario-capitan" data-id="${e.id}">👤 Usuario del capitán</button>` : ''}`;
-    return `<div class="card">
-      <div class="fila entre"><h2 class="eq-titulo">${esc(e.nombre)}${e.grupo ? ` <span class="badge">Grupo ${esc(e.grupo)}</span>` : ''}</h2>${esAdm ? '' : `<div class="fila">${botones}</div>`}</div>
+    return `<div class="card eq-card${abierto ? ' abierto' : ''}">
+      <button type="button" class="eq-cab" data-act="plantilla" data-id="${e.id}" aria-expanded="${abierto}">
+        <span class="eq-titulo">${esc(e.nombre)}${e.grupo ? ` <span class="badge">Grupo ${esc(e.grupo)}</span>` : ''}</span>
+        <span class="eq-info muted">${js.length} jugador${js.length === 1 ? '' : 'es'} <span class="eq-flecha">${abierto ? '▲' : '▼'}</span></span></button>
       ${db.faltaMigracion ? '' : resumenEquipo(e)}
+      ${!abierto ? '' : `${esAdm ? '' : `<div class="fila" style="margin-bottom:8px">${botones}</div>`}
       ${st.pagosEquipo === e.id ? panelPagosEquipo(e) : ''}
       ${!esAdm ? '' : `<form data-form="equipo" data-id="${e.id}"><div class="form-grid">
         <div class="campo"><label>Equipo</label><input name="nombre" required value="${esc(e.nombre)}"></div>
@@ -344,8 +346,8 @@ function admEquipos(t) {
       </div><div class="fila"><button class="btn chico" type="submit">Guardar</button><button class="btn sec chico" type="button" data-act="cancelar-form">Cancelar</button>
       ${botones}
       <button class="btn peligro chico" type="button" data-act="borrar-equipo" data-id="${e.id}">Borrar equipo</button></div></form>`}
-      ${abierto ? `<h3>Jugadores</h3>
-        ${js.length ? `<div class="tabla-wrap"><table><thead><tr><th>Núm.</th><th class="izq">Nombre</th><th class="izq">CURP (privado)</th><th>Nacimiento (privado)</th><th class="izq">Revisión</th><th class="izq">Credencial y pagos</th><th>Activo</th><th></th></tr></thead><tbody>
+      <h3>Jugadores</h3>
+        ${js.length ? `<div class="tabla-wrap"><table><thead><tr><th>Núm.</th><th class="izq">Nombre</th><th class="izq">CURP (privado)</th><th>Nacimiento (privado)</th><th class="izq">Revisión</th><th class="izq">Credencial y pagos</th><th>Activo</th></tr></thead><tbody>
         ${js.map(j => filaJugador(j, priv.get(j.id) || {}, t)).join('')}
         </tbody></table></div>` : '<p class="muted">Sin jugadores todavía.</p>'}
         ${!esAdm ? '' : `<form data-form="jugador" data-equipo="${e.id}" style="margin-top:10px"><div class="form-grid">
@@ -357,7 +359,7 @@ function admEquipos(t) {
         <form data-form="jugadores-lote" data-equipo="${e.id}" style="margin-top:10px">
           <label>Agregar varios a la vez: uno por renglón, "número, nombre" (el número es opcional)</label>
           <textarea name="lista" rows="3" placeholder="10, Juan Pérez López&#10;7, Luis García"></textarea>
-          <div class="fila" style="margin-top:6px"><button class="btn sec chico" type="submit">Agregar lista</button><button class="btn sec chico" type="button" data-act="cancelar-form">Cancelar</button></div></form>`}` : ''}
+          <div class="fila" style="margin-top:6px"><button class="btn sec chico" type="submit">Agregar lista</button><button class="btn sec chico" type="button" data-act="cancelar-form">Cancelar</button></div></form>`}`}
     </div>`;
   }).join('');
   return `${db.rol !== 'admin' ? '' : `<div class="card"><h2 style="margin-top:0">Nuevo equipo</h2>
@@ -427,19 +429,18 @@ function filaJugador(j, p, t) {
       <td class="izq"><input ${f} name="nombre" required value="${esc(j.nombre)}" style="min-width:180px"></td>
       <td class="izq"><input ${f} name="curp" maxlength="18" value="${esc(p.curp || '')}" style="text-transform:uppercase;min-width:190px"></td>
       <td><input ${f} name="fecha_nac" type="date" value="${esc(p.fecha_nac || '')}"></td>
-      <td class="izq muted" style="white-space:normal;font-size:12px">Si dejas la fecha vacía se toma la de la CURP.</td>
-      <td></td><td></td>
-      <td><form id="ej-${j.id}" data-form="jugador-editar" data-id="${j.id}" class="fila" style="flex-wrap:nowrap">
-        <button class="btn chico" type="submit">Guardar</button><button class="btn sec chico" type="button" data-act="editar-jugador" data-id="">Cancelar</button></form></td></tr>`;
+      <td colspan="3" class="izq"><form id="ej-${j.id}" data-form="jugador-editar" data-id="${j.id}" class="fila" style="flex-wrap:nowrap">
+        <button class="btn chico" type="submit">Guardar cambios</button><button class="btn sec chico" type="button" data-act="editar-jugador" data-id="">Cancelar</button></form>
+        <div class="muted" style="white-space:normal;font-size:12px;margin-top:4px">Si dejas la fecha vacía se toma la de la CURP.</div></td></tr>`;
   }
   const avisos = revisarJugador(p, t.categoria);
-  return `<tr><td>${j.numero ?? ''}</td><td class="izq">${esc(j.nombre)}${es17(j) ? ' <span class="sello17-mini" title="Tiene 17 años: solo puede haber uno en la cancha">17</span>' : ''}</td><td class="izq">${esc(p.curp || '')}</td><td>${esc(p.fecha_nac || '')}</td>
+  return `<tr><td>${j.numero ?? ''}</td><td class="izq">${esc(j.nombre)}${es17(j) ? ' <span class="sello17-mini" title="Tiene 17 años: solo puede haber uno en la cancha">17</span>' : ''}
+    ${db.rol === 'admin' ? `<div class="fila" style="gap:4px;margin-top:4px;flex-wrap:nowrap"><button class="btn sec chico" data-act="editar-jugador" data-id="${j.id}">Editar</button>
+    <button class="btn peligro chico" data-act="borrar-jugador" data-id="${j.id}">Quitar</button></div>` : ''}</td><td class="izq">${esc(p.curp || '')}</td><td>${esc(p.fecha_nac || '')}</td>
     <td class="izq" style="white-space:normal;font-size:12px;${avisos.length ? 'color:var(--rojo)' : 'color:var(--verde)'}">${avisos.length ? avisos.map(esc).join('<br>') : '✓ OK'}</td>
     <td class="izq">${celdaCredencial(j)}</td>
-    <td><input type="checkbox" data-act="activo-jugador" data-id="${j.id}" ${j.activo !== false ? 'checked' : ''} ${db.rol === 'admin' ? '' : 'disabled'}></td>
-    <td class="fila" style="flex-wrap:nowrap">${db.rol === 'admin' ? `<button class="btn sec chico" data-act="editar-jugador" data-id="${j.id}">Editar</button>
-    <button class="btn peligro chico" data-act="borrar-jugador" data-id="${j.id}">Quitar</button>` : ''}</td></tr>
-    ${st.pagosAbierto === j.id ? `<tr><td colspan="8" class="izq" style="white-space:normal">${panelPagos(j, t)}</td></tr>` : ''}`;
+    <td><input type="checkbox" data-act="activo-jugador" data-id="${j.id}" ${j.activo !== false ? 'checked' : ''} ${db.rol === 'admin' ? '' : 'disabled'}></td></tr>
+    ${st.pagosAbierto === j.id ? `<tr><td colspan="7" class="izq" style="white-space:normal">${panelPagos(j, t)}</td></tr>` : ''}`;
 }
 
 function celdaCredencial(j) {
