@@ -4,8 +4,8 @@
 // Para guardar en la nube, pega aquí los datos de tu proyecto de Supabase
 // (Project Settings > API). La "anon key" es pública por diseño; la seguridad
 // la dan las reglas del archivo supabase/schema.sql.
-export const SUPABASE_URL = '';
-export const SUPABASE_ANON_KEY = '';
+export const SUPABASE_URL = 'https://eqqrsnsnfhtooahdznxk.supabase.co';
+export const SUPABASE_ANON_KEY = 'sb_publishable_xWEJCCXEDlTsQrEtAOLWXA_QzxRKmUJ';
 
 // Nombre que aparece arriba en la página.
 export const NOMBRE_LIGA = 'Fútbol 7 Municipal Teocaltiche';
