@@ -1,5 +1,6 @@
 // Credenciales con QR: estado del jugador, perfil público al escanear y hoja imprimible.
 import { db, actualizar, tokenDe, perfilPorToken } from './db.js';
+import { edad, fechaDeCurp } from './validar.js';
 
 const D = () => db.data;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -14,6 +15,15 @@ export function contexto(j) {
   const t = e && D().torneos.find(x => x.id === e.torneo_id);
   return { e, t, liga: LIGA[ramaDe(t)] };
 }
+
+// Edad del jugador (por su fecha de nacimiento o su CURP); null si no se sabe o no hay permiso de verla.
+export function edadDe(j, hoy = new Date()) {
+  const p = D().jugadores_privado.find(x => x.id === j.id);
+  const f = p?.fecha_nac || fechaDeCurp(p?.curp || '');
+  return f ? edad(f, hoy) : null;
+}
+// Acuerdo de la liga: solo un jugador de 17 años (o más) puede estar en la cancha a la vez.
+export const es17 = j => (edadDe(j) ?? 0) >= 17;
 
 export function folioTxt(j) {
   if (!j.folio) return '—';
@@ -146,7 +156,7 @@ function tira(j, url) {
         <div class="cred-datos">
           <label>Nombre</label><p class="cred-nom">${esc(j.nombre)}</p>
           <label>Equipo</label><p>${esc(e?.nombre)}</p>
-          <div class="cred-fila"><div><label>Núm.</label><p class="cred-num">${j.numero ?? '—'}</p></div><div><label>Categoría</label><p>${esc((t?.categoria || '').replace(/^Juvenil\s*/i, '') || 'Juvenil')}</p></div></div>
+          <div class="cred-fila"><div><label>Núm.</label><p class="cred-num">${j.numero ?? '—'}</p></div><div><label>Categoría</label>${es17(j) ? '<p class="cred-sello17">17 AÑOS</p>' : `<p>${esc((t?.categoria || '').replace(/^Juvenil\s*/i, '') || 'Juvenil')}</p>`}</div></div>
           <div class="cred-fila"><div><label>Folio</label><p class="cred-mono">${folioTxt(j)}</p></div><div><label>Vigencia</label><p>${esc(t?.temporada || '')}</p></div></div>
         </div>
         <div class="cred-qr">${qrSvg(url)}<span>Escanea para validar</span></div>

@@ -1,7 +1,7 @@
 // Guarda la página en el teléfono para abrirla sin internet (en la cancha).
 // Archivos propios: primero internet (para tener siempre lo más nuevo) y si no hay, la copia guardada.
 // Librerías externas con versión fija: primero la copia guardada.
-const CACHE = 'f7teo-v5';
+const CACHE = 'f7teo-v6';
 const BASE = [
   './', 'index.html', 'styles.css', 'manifest.json',
   'js/app.js', 'js/db.js', 'js/config.js', 'js/credenciales.js', 'js/cedula.js', 'js/roundrobin.js', 'js/stats.js', 'js/validar.js', 'js/vendor/qrcode.js',

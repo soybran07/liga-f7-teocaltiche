@@ -403,3 +403,14 @@ a { color: var(--verde); }
 .cap-dos { display: grid; grid-template-columns: 1.6fr 1fr; gap: 12px; }
 .cap-dos > .card { margin: 0; }
 @media (max-width: 760px) { .cap-dos { grid-template-columns: 1fr; } }
+
+/* ---------- Títulos de equipo y sello de 17 años ---------- */
+.eq-titulo { font-family: var(--titulo); font-weight: 400; font-size: 24px; margin: 0 0 4px; letter-spacing: .3px; line-height: 1.15; }
+@media (max-width: 560px) { .eq-titulo { font-size: 20px; } }
+.sello17-mini { display: inline-block; font-family: var(--titulo); font-size: 11px; color: #fff; background: #e8102a; border-radius: 999px; padding: 1px 6px; vertical-align: 1px; }
+.cred-sello17 { display: inline-block; margin-top: .3mm !important; font-family: var(--titulo); font-weight: 400; font-size: 2.7mm !important; white-space: nowrap; color: #e8102a !important; border: .5mm solid #e8102a;
+  outline: .25mm solid #e8102a; outline-offset: .4mm; border-radius: .8mm; padding: .1mm .8mm; transform: rotate(-4deg); letter-spacing: .2mm; line-height: 1.2;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.ced-17 { display: inline-block; font-family: var(--titulo); font-size: 7pt; color: #fff; background: #e8102a; border-radius: 6px; padding: 0 3px; line-height: 1.4;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.cred-qr { position: relative; z-index: 1; }

@@ -2,7 +2,7 @@
 // activos, con registro pagado, sin multas de amarilla o roja pendientes y sin suspensión vigente.
 // Una multa de tarjeta azul pendiente NO impide jugar.
 import { db } from './db.js';
-import { contexto, estadoPagos, suspensionActiva } from './credenciales.js';
+import { contexto, estadoPagos, suspensionActiva, es17 } from './credenciales.js';
 
 const D = () => db.data;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -59,7 +59,7 @@ function bloqueEquipo(e, lista, filas) {
   const rows = [];
   for (let i = 0; i < filas; i++) {
     const x = lista[i];
-    rows.push(`<tr><td class="ced-n">${x ? (x.j.numero ?? '') : i + 1}</td><td class="ced-nom">${x ? esc(x.j.nombre) : ''}</td><td></td><td></td></tr>`);
+    rows.push(`<tr><td class="ced-n">${x ? (x.j.numero ?? '') : i + 1}</td><td class="ced-nom">${x ? esc(x.j.nombre) + (es17(x.j) ? ' <span class="ced-17">17</span>' : '') : ''}</td><td></td><td></td></tr>`);
   }
   return `<div class="ced-eq">
     <div class="ced-eqcab"><div class="ced-linea"><b>EQUIPO:</b><span class="ced-valor">${esc(e?.nombre)}</span></div>
@@ -98,6 +98,7 @@ export function vistaCedula(id) {
         <div class="ced-marcador"><span></span><i></i><span></span></div>
         <img src="${liga.logo}" alt="">
         <div class="ced-regla">${balon} Shootout en la falta 6 y después cada 3 (9, 12, 15…)</div>
+        <div class="ced-regla"><span class="ced-17">17</span> Jugador de 17 años: solo uno en la cancha por equipo</div>
       </div>
       ${bloqueEquipo(eV, pv.si, filas)}
     </div>

@@ -1,5 +1,5 @@
 import { db, iniciar, insertar, actualizar, actualizarVarios, borrar, entrar, salir, exportarJSON, importarJSON, reiniciarDemo, guardarPrivado, tokenDe, sincronizar, usuarios } from './db.js';
-import { vistaPerfil, vistaCredenciales, estadoPagos, suspensionActiva, folioTxt } from './credenciales.js';
+import { vistaPerfil, vistaCredenciales, estadoPagos, suspensionActiva, folioTxt, es17 } from './credenciales.js';
 import { vistaCedula, puedeJugar } from './cedula.js';
 import { unirGrupos, calendarizar, enfrentamientos, acomodarEnJornadas, equilibrarLocalia } from './roundrobin.js';
 const claveP = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
@@ -306,7 +306,7 @@ function formTorneo(t = {}) {
     <div class="campo"><label>Multa roja ($)</label><input name="multa_roja" type="number" min="0" value="${t.multa_roja ?? 50}"></div>
     <div class="campo"><label>Multa azul ($)</label><input name="multa_azul" type="number" min="0" value="${t.multa_azul ?? 10}"></div>
     <div class="campo"><label>Registro por jugador ($)</label><input name="cuota_registro" type="number" min="0" value="${t.cuota_registro ?? 50}"></div>
-  </div><button class="btn" type="submit">${t.id ? 'Guardar cambios' : 'Crear torneo'}</button></form>`;
+  </div><div class="fila"><button class="btn" type="submit">${t.id ? 'Guardar cambios' : 'Crear torneo'}</button><button class="btn sec" type="button" data-act="cancelar-form">Cancelar</button></div></form>`;
 }
 
 function admTorneos(t) {
@@ -332,7 +332,7 @@ function admEquipos(t) {
       <a class="btn sec chico" href="#/credenciales/${e.id}">🪪 Credenciales</a>`}
       ${esAdm && db.modo === 'supabase' ? `<button class="btn sec chico" type="button" data-act="usuario-capitan" data-id="${e.id}">👤 Usuario del capitán</button>` : ''}`;
     return `<div class="card">
-      ${esAdm ? '' : `<div class="fila entre"><h3 style="margin:0">${esc(e.nombre)}</h3><div class="fila">${botones}</div></div>`}
+      <div class="fila entre"><h2 class="eq-titulo">${esc(e.nombre)}${e.grupo ? ` <span class="badge">Grupo ${esc(e.grupo)}</span>` : ''}</h2>${esAdm ? '' : `<div class="fila">${botones}</div>`}</div>
       ${db.faltaMigracion ? '' : resumenEquipo(e)}
       ${st.pagosEquipo === e.id ? panelPagosEquipo(e) : ''}
       ${!esAdm ? '' : `<form data-form="equipo" data-id="${e.id}"><div class="form-grid">
@@ -340,7 +340,7 @@ function admEquipos(t) {
         <div class="campo"><label>Grupo (opcional)</label><input name="grupo" value="${esc(e.grupo || '')}" placeholder="A, B…"></div>
         <div class="campo"><label>Delegado</label><input name="delegado" value="${esc(e.delegado || '')}"></div>
         <div class="campo"><label>Teléfono</label><input name="telefono" value="${esc(e.telefono || '')}"></div>
-      </div><div class="fila"><button class="btn chico" type="submit">Guardar</button>
+      </div><div class="fila"><button class="btn chico" type="submit">Guardar</button><button class="btn sec chico" type="button" data-act="cancelar-form">Cancelar</button>
       ${botones}
       <button class="btn peligro chico" type="button" data-act="borrar-equipo" data-id="${e.id}">Borrar equipo</button></div></form>`}
       ${abierto ? `<h3>Jugadores</h3>
@@ -352,11 +352,11 @@ function admEquipos(t) {
           <div class="campo"><label>Número</label><input name="numero" type="number" min="0"></div>
           <div class="campo"><label>CURP (privado)</label><input name="curp" maxlength="18" style="text-transform:uppercase"></div>
           <div class="campo"><label>Fecha de nacimiento (privado)</label><input name="fecha_nac" type="date"></div>
-        </div><button class="btn chico" type="submit">Agregar jugador</button></form>
+        </div><div class="fila"><button class="btn chico" type="submit">Agregar jugador</button><button class="btn sec chico" type="button" data-act="cancelar-form">Cancelar</button></div></form>
         <form data-form="jugadores-lote" data-equipo="${e.id}" style="margin-top:10px">
           <label>Agregar varios a la vez: uno por renglón, "número, nombre" (el número es opcional)</label>
           <textarea name="lista" rows="3" placeholder="10, Juan Pérez López&#10;7, Luis García"></textarea>
-          <button class="btn sec chico" type="submit" style="margin-top:6px">Agregar lista</button></form>`}` : ''}
+          <div class="fila" style="margin-top:6px"><button class="btn sec chico" type="submit">Agregar lista</button><button class="btn sec chico" type="button" data-act="cancelar-form">Cancelar</button></div></form>`}` : ''}
     </div>`;
   }).join('');
   return `${db.rol !== 'admin' ? '' : `<div class="card"><h2 style="margin-top:0">Nuevo equipo</h2>
@@ -365,7 +365,7 @@ function admEquipos(t) {
       <div class="campo"><label>Grupo (opcional)</label><input name="grupo" placeholder="A, B…"></div>
       <div class="campo"><label>Delegado</label><input name="delegado"></div>
       <div class="campo"><label>Teléfono</label><input name="telefono"></div>
-    </div><button class="btn" type="submit">Agregar equipo</button></form></div>`}
+    </div><div class="fila"><button class="btn" type="submit">Agregar equipo</button><button class="btn sec" type="button" data-act="cancelar-form">Cancelar</button></div></form></div>`}
     ${resumenRevision(t, eqs, priv)}
     <p class="muted">${eqs.length} equipos. La CURP y la fecha de nacimiento solo las ve el administrador; nunca aparecen en la página pública.</p>${tarjetas}`;
 }
@@ -396,7 +396,7 @@ function panelPagosEquipo(e) {
       <div class="campo"><label>Concepto</label><select name="concepto">${['fianza', 'inscripcion', 'arbitraje', 'otro'].map(k => `<option value="${k}">${CONCEPTOS[k]}</option>`).join('')}</select></div>
       <div class="campo"><label>Monto ($)</label><input name="monto" type="number" min="0" required></div>
       <div class="campo"><label>Notas</label><input name="notas" placeholder="Ej. fianza temporada 2026-27"></div>
-      <div class="campo"><label style="display:flex;gap:5px;align-items:center"><input type="checkbox" name="pagado"> Ya pagado</label><button class="btn chico" type="submit">Agregar cargo</button></div>
+      <div class="campo"><label style="display:flex;gap:5px;align-items:center"><input type="checkbox" name="pagado"> Ya pagado</label><div class="fila"><button class="btn chico" type="submit">Agregar cargo</button><button class="btn sec chico" type="button" data-act="cancelar-form">Cancelar</button></div></div>
     </div></form></div>`;
 }
 
@@ -413,7 +413,7 @@ function filaJugador(j, p, t) {
         <button class="btn chico" type="submit">Guardar</button><button class="btn sec chico" type="button" data-act="editar-jugador" data-id="">Cancelar</button></form></td></tr>`;
   }
   const avisos = revisarJugador(p, t.categoria);
-  return `<tr><td>${j.numero ?? ''}</td><td class="izq">${esc(j.nombre)}</td><td class="izq">${esc(p.curp || '')}</td><td>${esc(p.fecha_nac || '')}</td>
+  return `<tr><td>${j.numero ?? ''}</td><td class="izq">${esc(j.nombre)}${es17(j) ? ' <span class="sello17-mini" title="Tiene 17 años: solo puede haber uno en la cancha">17</span>' : ''}</td><td class="izq">${esc(p.curp || '')}</td><td>${esc(p.fecha_nac || '')}</td>
     <td class="izq" style="white-space:normal;font-size:12px;${avisos.length ? 'color:var(--rojo)' : 'color:var(--verde)'}">${avisos.length ? avisos.map(esc).join('<br>') : '✓ OK'}</td>
     <td class="izq">${celdaCredencial(j)}</td>
     <td><input type="checkbox" data-act="activo-jugador" data-id="${j.id}" ${j.activo !== false ? 'checked' : ''} ${db.rol === 'admin' ? '' : 'disabled'}></td>
@@ -449,7 +449,7 @@ function panelPagos(j, t) {
       <div class="campo"><label>Concepto</label><select name="concepto">${Object.entries(CONCEPTOS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       <div class="campo"><label>Monto ($)</label><input name="monto" type="number" min="0" required></div>
       <div class="campo"><label>Notas</label><input name="notas"></div>
-      <div class="campo"><label style="display:flex;gap:5px;align-items:center"><input type="checkbox" name="pagado"> Ya pagado</label><button class="btn chico" type="submit">Agregar cargo</button></div>
+      <div class="campo"><label style="display:flex;gap:5px;align-items:center"><input type="checkbox" name="pagado"> Ya pagado</label><div class="fila"><button class="btn chico" type="submit">Agregar cargo</button><button class="btn sec chico" type="button" data-act="cancelar-form">Cancelar</button></div></div>
     </div></form>
     <h3>Suspensiones ${susp ? `<span class="badge" style="background:rgba(255,80,80,.3)">vigente: faltan ${susp.restantes}</span>` : ''}</h3>
     ${ss.length ? `<ul style="margin:0 0 8px;padding-left:18px">${ss.map(x => `<li>${x.partidos} partido(s) · ${esc(x.motivo || '')} · desde ${esc(x.fecha || '')}
@@ -457,7 +457,7 @@ function panelPagos(j, t) {
     <form data-form="suspension" data-jugador="${j.id}"><div class="form-grid">
       <div class="campo"><label>Partidos de suspensión</label><input name="partidos" type="number" min="1" value="1" required></div>
       <div class="campo"><label>Motivo</label><input name="motivo" placeholder="Ej. agresión verbal"></div>
-      <div class="campo"><button class="btn chico" type="submit">Agregar suspensión</button></div>
+      <div class="campo"><div class="fila"><button class="btn chico" type="submit">Agregar suspensión</button><button class="btn sec chico" type="button" data-act="cancelar-form">Cancelar</button></div></div>
     </div></form>
     <p class="muted" style="font-size:12px">Las multas por tarjeta y las suspensiones por roja o doble amarilla se crean solas al capturar el partido. La suspensión se da por cumplida cuando su equipo juega esos partidos.</p>
   </div>`;
@@ -523,7 +523,7 @@ function admGenerar(t) {
       <label><input type="checkbox" name="vuelta" checked> Incluir la vuelta</label>
       ${gs.length ? `<label><input type="checkbox" name="porGrupo" checked> Solo partidos dentro de cada grupo</label>` : ''}
     </div>
-    <button class="btn" type="submit" ${eqs.length < 2 ? 'disabled' : ''}>Generar en borrador</button>
+    <button class="btn" type="submit" ${eqs.length < 2 ? 'disabled' : ''}>Generar en borrador</button><button class="btn sec" type="button" data-act="cancelar-form">Cancelar</button>
     <span class="muted" style="margin-left:8px;font-size:13px">Las nuevas empiezan en la jornada ${maxJ + 1}.</span></form></div>
     ${htmlBorr}
     <div class="card"><h2 style="margin-top:0">Agregar un partido suelto</h2>
@@ -533,7 +533,7 @@ function admGenerar(t) {
         <div class="campo"><label>Visitante</label><select name="visita_id" required>${eqs.map((e, i) => `<option value="${e.id}" ${i === 1 ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select></div>
         <div class="campo"><label>Fecha</label><input name="fecha" type="date"></div>
         <div class="campo"><label>Hora</label><input name="hora" type="time"></div>
-      </div><button class="btn" type="submit">Agregar partido</button></form></div>`;
+      </div><div class="fila"><button class="btn" type="submit">Agregar partido</button><button class="btn sec" type="button" data-act="cancelar-form">Cancelar</button></div></form></div>`;
 }
 
 function generarJornadas(f, d) {
@@ -630,7 +630,7 @@ function admResultados(t) {
           <div class="campo"><label>Hora</label><input name="hora" type="time" value="${esc(p.hora || '')}"></div>
           <div class="campo"><label>Estado</label><select name="estado">${['programado', 'jugado', 'suspendido'].map(s => `<option ${s === p.estado ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
           <div class="campo"><label>Notas</label><input name="notas" value="${esc(p.notas || '')}" placeholder="Ej. ganado por default"></div>
-        </div><button class="btn chico" type="submit">Guardar</button></form>` : ''}
+        </div><div class="fila"><button class="btn chico" type="submit">Guardar</button><button class="btn sec chico" type="button" data-act="cancelar-form">Cancelar</button></div></form>` : ''}
     </div>`;
   }).join('');
 }
@@ -818,7 +818,7 @@ function admUsuarios() {
         <div class="campo" id="u-equipo-campo" ${CARGOS[nuevo.cargo] === 'capitan' ? '' : 'hidden'}><label>Equipo del capitán</label><select name="equipo_id"><option value="">— Elige —</option>${opEquipos(nuevo.equipo)}</select></div>
         <div class="campo"><label>Correo</label><input name="email" type="email" required autocomplete="off"></div>
         <div class="campo"><label>Contraseña (mínimo 8)</label><input name="password" type="password" minlength="8" required autocomplete="new-password"></div>
-      </div><button class="btn" type="submit">Dar de alta</button>
+      </div><div class="fila"><button class="btn" type="submit">Dar de alta</button><button class="btn sec" type="button" data-act="cancelar-form">Cancelar</button></div>
       <p class="muted" style="font-size:13px">Pásale su contraseña en persona. Después la puedes cambiar aquí mismo con el botón "Contraseña".</p></form></div>`;
 }
 
@@ -909,6 +909,17 @@ $app.addEventListener('click', ev => {
     reiniciar: () => confirm('¿Borrar todo lo capturado en este navegador?') && (reiniciarDemo(), st.torneoId = null, render()),
     salir: () => seguro(async () => { await salir(); toast('Sesión cerrada'); }),
     'u-recargar': () => { st.usuarios = null; render(); },
+    'cancelar-form': () => {
+      const f = b.closest('form'); if (!f) return;
+      const tipo = f.dataset.form;
+      f.reset();
+      if (tipo === 'pago' || tipo === 'suspension') st.pagosAbierto = null;
+      if (tipo === 'pago-equipo') st.pagosEquipo = null;
+      if (tipo === 'resultado') st.abierto = null;
+      if (tipo === 'u-crear') st.uNuevo = null;
+      if (tipo === 'jugador' || tipo === 'jugadores-lote') st.equipoAbierto = null;
+      render(); toast('Cancelado: no se guardó nada');
+    },
     'usuario-capitan': () => {
       const e = D().equipos.find(x => x.id === id);
       st.uNuevo = { cargo: 'Capitán', equipo: id, nombre: e?.delegado || '' }; st.tabAdmin = 'usuarios'; render(); window.scrollTo?.(0, document.body.scrollHeight);
