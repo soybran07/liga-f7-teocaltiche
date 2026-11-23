@@ -93,6 +93,7 @@ function render() {
   if (t) st.torneoId = t.id;
   document.body.dataset.tema = st.rama || (r === 'admin' ? 'admin' : 'inicio');
   document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('activo', a.dataset.nav === r));
+  pintarSesion(r);
   const aviso = document.getElementById('aviso');
   if (db.modo === 'demo') {
     aviso.hidden = false;
@@ -268,7 +269,7 @@ function vistaAdmin() {
   const t = torneo();
   const ROLES = { admin: 'Administrador', finanzas: 'Finanzas', captura: 'Captura de resultados' };
   const cab = `<div class="fila entre"><h1>Administrar${t ? ': ' + esc(t.nombre) : ''} <span class="badge">${ROLES[db.rol] || ''}</span></h1><div class="fila">${selectorTorneo()}
-    ${db.modo === 'supabase' ? `<button class="btn sec chico" data-act="salir">Cerrar sesión</button>` : ''}</div></div>`;
+</div></div>`;
   const porRol = {
     admin: t ? [['resultados', 'Capturar juegos'], ['equipos', 'Equipos y jugadores'], ['generar', 'Generar jornadas'], ['torneos', 'Torneos'], ['usuarios', 'Panel de control'], ['respaldo', 'Respaldo']]
       : [['torneos', 'Torneos'], ['usuarios', 'Panel de control'], ['respaldo', 'Respaldo']],
@@ -976,6 +977,24 @@ $app.addEventListener('submit', ev => {
 });
 
 window.addEventListener('hashchange', () => { render(); window.scrollTo?.(0, 0); });
+
+// ---------- Botón de sesión en la barra de arriba ----------
+// Sin sesión: "Iniciar sesión". Con sesión: "Cerrar sesión" (y "Mi panel" cuando estás en la parte pública).
+function pintarSesion(r) {
+  const a = document.querySelector('.nav-admin');
+  if (!a) return;
+  const dentro = db.modo === 'supabase' && db.esAdmin;
+  a.textContent = dentro ? 'Mi panel' : 'Iniciar sesión';
+  a.hidden = dentro && r === 'admin';
+  let b = document.getElementById('btn-salir');
+  if (dentro && !b) {
+    b = document.createElement('button');
+    b.id = 'btn-salir'; b.type = 'button'; b.className = 'nav-salir'; b.textContent = 'Cerrar sesión';
+    b.addEventListener('click', () => seguro(async () => { await salir(); toast('Sesión cerrada'); location.hash = '#/'; }));
+    a.after(b);
+  }
+  if (!dentro && b) b.remove();
+}
 
 // ---------- Aviso de conexión y cambios pendientes ----------
 function pintarSync() {
