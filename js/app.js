@@ -1,4 +1,4 @@
-import { db, iniciar, insertar, actualizar, actualizarVarios, borrar, entrar, salir, exportarJSON, importarJSON, reiniciarDemo, guardarPrivado, tokenDe } from './db.js';
+import { db, iniciar, insertar, actualizar, actualizarVarios, borrar, entrar, salir, exportarJSON, importarJSON, reiniciarDemo, guardarPrivado, tokenDe, sincronizar, usuarios } from './db.js';
 import { vistaPerfil, vistaCredenciales, estadoPagos, suspensionActiva, folioTxt } from './credenciales.js';
 import { unirGrupos, calendarizar, enfrentamientos, acomodarEnJornadas, equilibrarLocalia } from './roundrobin.js';
 const claveP = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
@@ -22,6 +22,8 @@ const st = {
   cap: null,              // captura de resultado en curso
   pagosEquipo: null,      // equipo con pagos (fianza) abiertos
   vistaPrevia: null,      // partidos generados sin guardar
+  usuarios: null,         // panel de control: { cargando, lista, yo, error }
+  passDe: null,           // usuario al que se le cambia la contraseña
 };
 const guardarPref = () => { try { localStorage.setItem(PREF, JSON.stringify({ torneoId: st.torneoId })); } catch { } };
 
@@ -268,15 +270,15 @@ function vistaAdmin() {
   const cab = `<div class="fila entre"><h1>Administrar${t ? ': ' + esc(t.nombre) : ''} <span class="badge">${ROLES[db.rol] || ''}</span></h1><div class="fila">${selectorTorneo()}
     ${db.modo === 'supabase' ? `<button class="btn sec chico" data-act="salir">Cerrar sesión</button>` : ''}</div></div>`;
   const porRol = {
-    admin: t ? [['resultados', 'Capturar juegos'], ['equipos', 'Equipos y jugadores'], ['generar', 'Generar jornadas'], ['torneos', 'Torneos'], ['respaldo', 'Respaldo']]
-      : [['torneos', 'Torneos'], ['respaldo', 'Respaldo']],
+    admin: t ? [['resultados', 'Capturar juegos'], ['equipos', 'Equipos y jugadores'], ['generar', 'Generar jornadas'], ['torneos', 'Torneos'], ['usuarios', 'Panel de control'], ['respaldo', 'Respaldo']]
+      : [['torneos', 'Torneos'], ['usuarios', 'Panel de control'], ['respaldo', 'Respaldo']],
     captura: t ? [['resultados', 'Capturar juegos']] : [],
     finanzas: t ? [['equipos', 'Equipos y jugadores']] : [],
   };
   const lista = porRol[db.rol] || [];
   if (!lista.length) return cab + `<div class="card vacio">Todavía no hay torneos.</div>`;
   if (!lista.some(([id]) => id === st.tabAdmin)) st.tabAdmin = lista[0][0];
-  const cuerpo = { resultados: admResultados, equipos: admEquipos, generar: admGenerar, torneos: admTorneos, respaldo: admRespaldo }[st.tabAdmin](t);
+  const cuerpo = { resultados: admResultados, equipos: admEquipos, generar: admGenerar, torneos: admTorneos, usuarios: admUsuarios, respaldo: admRespaldo }[st.tabAdmin](t);
   const avisoRoles = db.faltaRoles && db.rol === 'admin' ? `<div class="card" style="border-color:#f5c518"><b>Falta un paso en Supabase:</b> para los usuarios de finanzas y captura, y las jornadas en borrador, corre <code>supabase/migracion-003-roles-borrador.sql</code>.</div>` : '';
   const aviso = avisoRoles + (db.faltaMigracion ? `<div class="card" style="border-color:#f5c518"><b>Falta un paso en Supabase:</b> para usar credenciales, pagos y suspensiones corre una vez el archivo <code>supabase/migracion-002-credenciales.sql</code> en Supabase &gt; SQL Editor.</div>` : '');
   return cab + aviso + tabs(lista, st.tabAdmin, 'tabAdmin') + cuerpo;
@@ -705,6 +707,53 @@ async function guardarCaptura() {
   toast(`Resultado guardado: ${gl} – ${gv}${avisos.length ? ' · Suspensiones: ' + avisos.join(', ') : ''}`);
 }
 
+// ----- Panel de control: usuarios de la mesa de control -----
+const CARGOS = { Presidente: 'admin', Secretario: 'captura', 'Tesorero(a)': 'finanzas', Vocal: 'captura', Otro: 'captura' };
+const ROL_TXT = { admin: 'Administrador (todo)', finanzas: 'Finanzas (pagos, registro, fianzas, credenciales)', captura: 'Captura de resultados' };
+
+function cargarUsuarios() {
+  st.usuarios = { cargando: true, lista: [] };
+  usuarios('listar').then(r => { st.usuarios = { lista: r.usuarios, yo: r.yo }; })
+    .catch(e => { st.usuarios = { lista: [], error: e.message }; })
+    .finally(() => { if (st.tabAdmin === 'usuarios') render(); });
+}
+
+function admUsuarios() {
+  if (db.modo === 'demo') return `<div class="card vacio">El panel de control de usuarios funciona cuando la página está conectada a Supabase.</div>`;
+  if (!st.usuarios) cargarUsuarios();
+  const u = st.usuarios;
+  const orden = ['Presidente', 'Secretario', 'Tesorero(a)', 'Vocal'];
+  const lista = [...u.lista].sort((a, b) => ((orden.indexOf(a.cargo) + 1) || 9) - ((orden.indexOf(b.cargo) + 1) || 9) || String(a.nombre).localeCompare(String(b.nombre), 'es'));
+  const opRol = sel => Object.entries(ROL_TXT).map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v}</option>`).join('');
+  const opCargo = sel => Object.keys(CARGOS).map(k => `<option ${k === sel ? 'selected' : ''}>${k}</option>`).join('');
+  const filas = lista.map(x => {
+    const soyYo = x.user_id === u.yo;
+    return `<tr><td class="izq"><b>${esc(x.nombre || '—')}</b>${soyYo ? ' <span class="badge">tú</span>' : ''}<br><span class="muted" style="font-size:13px">${esc(x.email)}</span></td>
+      <td><select data-cambio="u-cargo" data-id="${x.user_id}">${opCargo(x.cargo)}</select></td>
+      <td><select data-cambio="u-rol" data-id="${x.user_id}" ${soyYo ? 'disabled' : ''}>${opRol(x.rol)}</select></td>
+      <td class="muted" style="font-size:13px">${x.ultimo_acceso ? fmtFecha(x.ultimo_acceso.slice(0, 10)) : 'Nunca'}</td>
+      <td class="fila" style="flex-wrap:nowrap"><button class="btn sec chico" data-act="u-pass" data-id="${x.user_id}">Contraseña</button>
+        ${soyYo ? '' : `<button class="btn peligro chico" data-act="u-quitar" data-id="${x.user_id}" data-nombre="${esc(x.nombre || x.email)}">Quitar acceso</button>`}</td></tr>
+      ${st.passDe === x.user_id ? `<tr><td colspan="5"><form data-form="u-pass" data-id="${x.user_id}" class="fila">
+        <input name="password" type="password" minlength="8" required autocomplete="new-password" placeholder="Nueva contraseña (mínimo 8)" style="max-width:260px">
+        <button class="btn chico" type="submit">Guardar contraseña</button><button class="btn sec chico" type="button" data-act="u-pass" data-id="">Cancelar</button></form></td></tr>` : ''}`;
+  }).join('');
+  return `<div class="card"><div class="fila entre"><h2 style="margin:0">Mesa de control</h2><button class="btn sec chico" data-act="u-recargar">Actualizar</button></div>
+      <p class="muted">Cada integrante entra en <b>Iniciar sesión</b> con su correo y contraseña, y solo ve lo que le toca según su rol.</p>
+      ${u.cargando ? '<p class="muted">Cargando usuarios…</p>' : u.error ? `<div class="card" style="border-color:#f5c518">${esc(u.error)}</div>`
+      : `<div class="tabla-wrap"><table><thead><tr><th class="izq">Integrante</th><th>Cargo</th><th>Rol (qué puede hacer)</th><th>Último acceso</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>`}
+    </div>
+    <div class="card"><h2 style="margin-top:0">Dar de alta un usuario</h2>
+      <form data-form="u-crear"><div class="form-grid">
+        <div class="campo"><label>Nombre</label><input name="nombre" required placeholder="Ej. Ana López"></div>
+        <div class="campo"><label>Cargo</label><select name="cargo" data-cambio="u-cargo-nuevo">${opCargo('Tesorero(a)')}</select></div>
+        <div class="campo"><label>Rol</label><select name="rol" id="u-rol-nuevo">${opRol('finanzas')}</select></div>
+        <div class="campo"><label>Correo</label><input name="email" type="email" required autocomplete="off"></div>
+        <div class="campo"><label>Contraseña (mínimo 8)</label><input name="password" type="password" minlength="8" required autocomplete="new-password"></div>
+      </div><button class="btn" type="submit">Dar de alta</button>
+      <p class="muted" style="font-size:13px">Pásale su contraseña en persona. Después la puedes cambiar aquí mismo con el botón "Contraseña".</p></form></div>`;
+}
+
 // ----- Respaldo -----
 function admRespaldo() {
   return `<div class="card"><h2 style="margin-top:0">Respaldo</h2>
@@ -791,6 +840,12 @@ $app.addEventListener('click', ev => {
     },
     reiniciar: () => confirm('¿Borrar todo lo capturado en este navegador?') && (reiniciarDemo(), st.torneoId = null, render()),
     salir: () => seguro(async () => { await salir(); toast('Sesión cerrada'); }),
+    'u-recargar': () => { st.usuarios = null; render(); },
+    'u-pass': () => { st.passDe = id || null; render(); },
+    'u-quitar': () => confirm(`¿Quitarle el acceso a ${b.dataset.nombre}? Ya no podrá iniciar sesión. Lo puedes volver a dar de alta con el mismo correo.`) && seguro(async () => {
+      await usuarios('quitar', { user_id: id }); st.usuarios = null; toast('Acceso quitado');
+    }),
+    sincronizar: () => seguro(async () => { const n = await sincronizar(); toast(db.offline ? 'Sigue sin internet' : `Listo${n ? `: ${n} cambios enviados` : ''}`); }),
   };
   acciones[act]?.();
 });
@@ -800,6 +855,12 @@ $app.addEventListener('change', ev => {
   if (!el) return;
   const c = el.dataset.cambio;
   if (c === 'torneo') { st.torneoId = el.value; st.jornadaAdmin = null; st.vistaPrevia = null; guardarPref(); render(); }
+  if (c === 'u-cargo-nuevo') { const r = document.getElementById('u-rol-nuevo'); if (r) r.value = CARGOS[el.value]; }
+  if (c === 'u-rol' || c === 'u-cargo') seguro(async () => {
+    await usuarios('cambiar', { user_id: el.dataset.id, [c === 'u-rol' ? 'rol' : 'cargo']: el.value });
+    const x = st.usuarios?.lista.find(y => y.user_id === el.dataset.id); if (x) x[c === 'u-rol' ? 'rol' : 'cargo'] = el.value;
+    toast('Guardado');
+  });
   if (c === 'jornada') { st.jornadaAdmin = Number(el.value); st.abierto = null; render(); }
   if (c === 'b-fecha' || c === 'b-hora') seguro(() => actualizar('partidos', el.dataset.id, { [c === 'b-fecha' ? 'fecha' : 'hora']: el.value }));
   if (c === 'cap-gl') st.cap.gl = Number(el.value) || 0;
@@ -820,6 +881,11 @@ $app.addEventListener('submit', ev => {
   const d = datosForm(f);
   const formularios = {
     login: () => seguro(async () => { await entrar(d.email, d.password); toast('Bienvenido'); }),
+    'u-crear': () => seguro(async () => {
+      const r = await usuarios('crear', { nombre: d.nombre, cargo: d.cargo, rol: d.rol, email: d.email, password: d.password });
+      st.usuarios = null; toast(r.existente ? 'Ese correo ya existía: se le dieron los permisos (su contraseña no cambió)' : `${d.nombre} dado de alta`);
+    }),
+    'u-pass': () => seguro(async () => { await usuarios('password', { user_id: f.dataset.id, password: d.password }); st.passDe = null; toast('Contraseña cambiada'); }),
     torneo: () => seguro(async () => {
       const fila = { nombre: d.nombre.trim(), categoria: d.categoria, temporada: d.temporada, sede: d.sede,
         pts_victoria: Number(d.pts_victoria), pts_empate: Number(d.pts_empate),
@@ -911,9 +977,45 @@ $app.addEventListener('submit', ev => {
 
 window.addEventListener('hashchange', () => { render(); window.scrollTo?.(0, 0); });
 
+// ---------- Aviso de conexión y cambios pendientes ----------
+function pintarSync() {
+  const el = document.getElementById('sync');
+  if (!el) return;
+  const n = db.pendientes.length;
+  let txt = '', clase = '';
+  if (db.modo !== 'supabase') txt = '';
+  else if (db.sincronizando && n) { txt = `Enviando ${n} cambio${n === 1 ? '' : 's'}…`; clase = 'enviando'; }
+  else if (db.offline || n) {
+    clase = 'sin-red';
+    txt = n ? `Sin internet · ${n} cambio${n === 1 ? '' : 's'} guardado${n === 1 ? '' : 's'} en este teléfono. Se envían solos al volver la señal.`
+      : `Sin internet · viendo los datos guardados en este teléfono.`;
+  } else if (db.fallidos.length) { txt = `${db.fallidos.length} cambio(s) no se pudieron guardar en la nube: ${db.fallidos.slice(-1)[0].error}`; clase = 'error'; }
+  el.hidden = !txt;
+  el.className = 'sync ' + clase;
+  el.innerHTML = txt ? `${esc(txt)}${navigator.onLine && n && !db.sincronizando ? ' <button data-sync>Enviar ahora</button>' : ''}${clase === 'error' ? ' <button data-sync-ok>Entendido</button>' : ''}` : '';
+}
+let estabaSincronizando = false;
+db.alCambiarSync = () => {
+  pintarSync();
+  if (estabaSincronizando && !db.sincronizando) {
+    const enUso = document.activeElement?.matches?.('input, select, textarea');
+    if (!enUso) render();
+  }
+  estabaSincronizando = db.sincronizando;
+};
+document.getElementById('sync')?.addEventListener('click', ev => {
+  if (ev.target.closest('[data-sync]')) sincronizar();
+  if (ev.target.closest('[data-sync-ok]')) { db.fallidos = []; pintarSync(); }
+});
+
+// Guarda la página en el teléfono para poder abrirla sin internet.
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('Sin modo offline:', e));
+}
+
 // ---------- arranque ----------
 document.getElementById('nombre-liga').textContent = NOMBRE_LIGA;
-iniciar().then(render).catch(e => {
+iniciar().then(() => { render(); pintarSync(); }).catch(e => {
   console.error(e);
   $app.innerHTML = `<div class="card"><h1>No se pudo conectar</h1><p>${esc(e.message)}</p><p class="muted">Revisa js/config.js y que hayas corrido supabase/schema.sql.</p></div>`;
 });

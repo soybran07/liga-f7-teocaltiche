@@ -1,0 +1,13 @@
+{
+  "name": "Liga Fútbol 7 Teocaltiche",
+  "short_name": "Liga F7",
+  "start_url": "./#/admin",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b2a1c",
+  "theme_color": "#019859",
+  "lang": "es",
+  "icons": [
+    { "src": "img/logo-varonil.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

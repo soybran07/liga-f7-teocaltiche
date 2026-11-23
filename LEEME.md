@@ -78,3 +78,14 @@ En el modo demo ve a **Administrar > Respaldo > Descargar respaldo**. Ya con Sup
 - Control de pagos (inscripción $350, registro $50, arbitraje por partido) y adeudos por equipo.
 - Suspensiones automáticas por tarjetas.
 - Liguilla (cuartos, semis y final) al terminar la fase regular.
+
+## Modo sin internet (cancha sin wifi)
+- Abre la página **dos veces con internet** en cada teléfono e inicia sesión. Desde ahí se queda guardada y abre sin señal.
+- Sin señal puedes cobrar, marcar registros y capturar resultados. Arriba sale un aviso naranja con los cambios pendientes, y al volver el internet se mandan solos (o con "Enviar ahora").
+- No cierres sesión mientras haya cambios pendientes; la página no te deja para no perderlos.
+- Opcional: en el celular, menú del navegador > "Agregar a pantalla de inicio" para abrirla como app.
+
+## Panel de control (usuarios de la mesa de control)
+1. Corre `supabase/migracion-004-mesa-control.sql` en SQL Editor.
+2. Instala la función: Supabase > Edge Functions > Deploy a new function > Via Editor. Nombre: `usuarios`. Pega el contenido de `supabase/functions/usuarios/index.ts` y dale Deploy (deja activado "Verify JWT").
+3. En la página: Iniciar sesión > Panel de control > Dar de alta un usuario.
