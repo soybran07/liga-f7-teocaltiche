@@ -414,3 +414,13 @@ a { color: var(--verde); }
 .ced-17 { display: inline-block; font-family: var(--titulo); font-size: 7pt; color: #fff; background: #e8102a; border-radius: 6px; padding: 0 3px; line-height: 1.4;
   -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .cred-qr { position: relative; z-index: 1; }
+
+/* ---------- Credenciales en masa: 5 por hoja carta ---------- */
+.hoja-cred:has(.hoja-pag) { gap: 6mm; }
+.hoja-pag { display: flex; flex-direction: column; gap: 0; background: #fff; padding: 0; box-shadow: 0 2mm 8mm rgba(0,0,0,.35); }
+.hoja-pag .cred-tira { box-shadow: none; outline: .15mm solid #bbb; }
+@media print {
+  .hoja-cred:has(.hoja-pag) { gap: 0; }
+  .hoja-pag { box-shadow: none; break-after: page; page-break-after: always; }
+  .hoja-pag:last-child { break-after: auto; page-break-after: auto; }
+}

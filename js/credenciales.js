@@ -105,22 +105,33 @@ async function llenarPerfil(token) {
 }
 
 // ---------- Hoja de credenciales (#/credenciales/EQUIPO o #/credenciales/j/JUGADOR) ----------
-export function vistaCredenciales(ruta, incluirSinRegistro) {
-  setTimeout(() => llenarCredenciales(ruta, incluirSinRegistro), 0);
+// ruta: EQUIPO_ID, j/JUGADOR_ID o todos/TORNEO_ID (todos los equipos, ordenados por equipo).
+export function vistaCredenciales(ruta, incluirSinRegistro, hojaPorEquipo = false) {
+  setTimeout(() => llenarCredenciales(ruta, incluirSinRegistro, hojaPorEquipo), 0);
   return `<div class="no-print card"><div class="fila entre"><div><h1 style="margin:0">Credenciales</h1>
-      <p class="muted" style="margin:4px 0 0">Imprime en opalina tamaño carta, a escala 100% (tamaño real). Recorta cada tira, dóblala por la línea punteada, pega la foto y firma el reverso.</p></div>
+      <p class="muted" style="margin:4px 0 0">Caben <b>5 credenciales por hoja carta</b>, pegadas una con otra para no desperdiciar papel. Imprime en opalina a escala 100% (tamaño real) y márgenes "Predeterminados". Recorta por las orillas, dobla por la línea punteada, pega la foto y firma el reverso.</p></div>
       <div class="fila"><a class="btn sec" href="#/admin">← Volver</a><button class="btn" data-act="imprimir">Imprimir</button></div></div>
-      ${ruta.startsWith('j/') ? '' : `<label style="margin-top:8px;display:flex;gap:6px;align-items:center"><input type="checkbox" data-act="cred-todos" ${incluirSinRegistro ? 'checked' : ''}> Incluir también jugadores sin registro pagado</label>`}</div>
+      ${ruta.startsWith('j/') ? '' : `<label style="margin-top:8px;display:flex;gap:6px;align-items:center"><input type="checkbox" data-act="cred-todos" ${incluirSinRegistro ? 'checked' : ''}> Incluir también jugadores sin registro pagado</label>`}
+      ${ruta.startsWith('todos/') ? `<label style="margin-top:4px;display:flex;gap:6px;align-items:center"><input type="checkbox" data-act="cred-hoja-equipo" ${hojaPorEquipo ? 'checked' : ''}> Empezar cada equipo en hoja nueva (gasta más hojas)</label>` : ''}
+      <p id="cred-cuenta" class="muted" style="margin:6px 0 0"></p></div>
+    <style>@media print { @page { size: letter; margin: 4.5mm 8mm; } }</style>
     <div id="hoja-cred" class="hoja-cred"><p class="muted">Preparando credenciales…</p></div>`;
 }
 
-async function llenarCredenciales(ruta, incluirSinRegistro) {
+const POR_HOJA = 5;
+
+async function llenarCredenciales(ruta, incluirSinRegistro, hojaPorEquipo) {
   const cont = document.getElementById('hoja-cred');
   if (!cont) return;
-  let lista;
-  if (ruta.startsWith('j/')) lista = D().jugadores.filter(j => j.id === ruta.slice(2));
-  else lista = D().jugadores.filter(j => j.equipo_id === ruta && j.activo !== false && (incluirSinRegistro || estadoPagos(j).registro))
-    .sort((a, b) => (a.numero ?? 999) - (b.numero ?? 999) || a.nombre.localeCompare(b.nombre, 'es'));
+  const ordenar = arr => arr.sort((a, b) => (a.numero ?? 999) - (b.numero ?? 999) || a.nombre.localeCompare(b.nombre, 'es'));
+  const deEquipo = id => ordenar(D().jugadores.filter(j => j.equipo_id === id && j.activo !== false && (incluirSinRegistro || estadoPagos(j).registro)));
+  let lista, grupos;
+  if (ruta.startsWith('j/')) { lista = D().jugadores.filter(j => j.id === ruta.slice(2)); grupos = [lista]; }
+  else if (ruta.startsWith('todos/')) {
+    const eqs = D().equipos.filter(e => e.torneo_id === ruta.slice(6)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    grupos = eqs.map(e => deEquipo(e.id)).filter(g => g.length);
+    lista = grupos.flat();
+  } else { lista = deEquipo(ruta); grupos = [lista]; }
   if (!lista.length) {
     cont.innerHTML = `<div class="card vacio no-print">No hay jugadores con registro pagado en este equipo. Marca "Registro" en la lista de jugadores o activa la casilla de arriba.</div>`;
     return;
@@ -131,9 +142,16 @@ async function llenarCredenciales(ruta, incluirSinRegistro) {
       if (!j.folio && !db.faltaMigracion) await actualizar('jugadores', j.id, { folio: ++max });
     }
     const base = location.origin + location.pathname;
-    const tiras = [];
-    for (const j of lista) tiras.push(tira(j, base + '#/j/' + await tokenDe(j.id)));
-    if (document.getElementById('hoja-cred')) cont.innerHTML = tiras.join('');
+    const html = new Map();
+    for (const j of lista) html.set(j.id, tira(j, base + '#/j/' + await tokenDe(j.id)));
+    // Acomoda de 5 en 5 por hoja; si se pide, cada equipo empieza en hoja nueva.
+    const hojas = [];
+    const bloques = hojaPorEquipo ? grupos : [lista];
+    for (const g of bloques) for (let i = 0; i < g.length; i += POR_HOJA) hojas.push(g.slice(i, i + POR_HOJA));
+    if (!document.getElementById('hoja-cred')) return;
+    cont.innerHTML = hojas.map(h => `<div class="hoja-pag">${h.map(j => html.get(j.id)).join('')}</div>`).join('');
+    const c = document.getElementById('cred-cuenta');
+    if (c) c.textContent = `${lista.length} credencial${lista.length === 1 ? '' : 'es'} en ${hojas.length} hoja${hojas.length === 1 ? '' : 's'} carta.`;
   } catch (e) {
     cont.innerHTML = `<div class="card vacio">No se pudieron preparar: ${esc(e.message)}</div>`;
   }

@@ -1,4 +1,4 @@
-import { db, iniciar, insertar, actualizar, actualizarVarios, borrar, entrar, salir, exportarJSON, importarJSON, reiniciarDemo, guardarPrivado, tokenDe, sincronizar, usuarios } from './db.js';
+import { db, nuevoToken, iniciar, insertar, actualizar, actualizarVarios, borrar, entrar, salir, exportarJSON, importarJSON, reiniciarDemo, guardarPrivado, tokenDe, sincronizar, usuarios } from './db.js';
 import { vistaPerfil, vistaCredenciales, estadoPagos, suspensionActiva, folioTxt, es17 } from './credenciales.js';
 import { vistaCedula, puedeJugar } from './cedula.js';
 import { unirGrupos, calendarizar, enfrentamientos, acomodarEnJornadas, equilibrarLocalia } from './roundrobin.js';
@@ -20,6 +20,7 @@ const st = {
   jugadorEditando: null,  // jugador en edición
   pagosAbierto: null,     // jugador con pagos/suspensiones abiertos
   credTodos: false,       // credenciales: incluir sin registro pagado
+  credHoja: false,        // credenciales de todos: cada equipo en hoja nueva
   cap: null,              // captura de resultado en curso
   pagosEquipo: null,      // equipo con pagos (fianza) abiertos
   vistaPrevia: null,      // partidos generados sin guardar
@@ -104,7 +105,7 @@ function render() {
   if (r === 'perfil') { $app.innerHTML = vistaPerfil(decodeURIComponent(location.hash.slice(4))); return; }
   if (r === 'cedula') { $app.innerHTML = esStaff() ? vistaCedula(location.hash.slice('#/cedula/'.length)) : vistaAdmin(); return; }
   if (r === 'credenciales') {
-    $app.innerHTML = esStaff() ? vistaCredenciales(location.hash.slice('#/credenciales/'.length), st.credTodos) : vistaAdmin();
+    $app.innerHTML = esStaff() ? vistaCredenciales(location.hash.slice('#/credenciales/'.length), st.credTodos, st.credHoja) : vistaAdmin();
     return;
   }
   $app.innerHTML = r === 'admin' ? vistaAdmin() : r === 'inicio' ? vistaInicio() : vistaPublica();
@@ -366,8 +367,27 @@ function admEquipos(t) {
       <div class="campo"><label>Delegado</label><input name="delegado"></div>
       <div class="campo"><label>Teléfono</label><input name="telefono"></div>
     </div><div class="fila"><button class="btn" type="submit">Agregar equipo</button><button class="btn sec" type="button" data-act="cancelar-form">Cancelar</button></div></form></div>`}
+    ${db.faltaMigracion ? '' : `<div class="card"><div class="fila entre"><div><h2 style="margin:0">Credenciales de todo el torneo</h2>
+      <p class="muted" style="margin:4px 0 0">${(() => { const js = eqs.flatMap(e => jugadoresDe(e.id)).filter(j => j.activo !== false); const sin = js.filter(j => !j.folio || !priv.get(j.id)?.token).length;
+        return `${js.length} jugadores activos · ${sin ? `<b style="color:#ffd166">${sin} sin folio o código QR</b>` : 'todos con folio y código QR'}`; })()}</p></div>
+      <div class="fila"><button class="btn sec" data-act="generar-ids">Generar folios y códigos QR de todos</button>
+      <a class="btn" href="#/credenciales/todos/${t.id}">🖨️ Imprimir credenciales de todos los equipos</a></div></div></div>`}
     ${resumenRevision(t, eqs, priv)}
     <p class="muted">${eqs.length} equipos. La CURP y la fecha de nacimiento solo las ve el administrador; nunca aparecen en la página pública.</p>${tarjetas}`;
+}
+
+// Da folio y código QR a todos los jugadores activos del torneo que no lo tengan (en orden de equipo y número).
+async function generarIds(t) {
+  if (!t) return 0;
+  const js = equiposDe(t.id).flatMap(e => jugadoresDe(e.id)).filter(j => j.activo !== false);
+  const priv = new Map(D().jugadores_privado.map(p => [p.id, p]));
+  let n = 0;
+  const nuevos = js.filter(j => !priv.has(j.id)).map(j => ({ id: j.id, token: nuevoToken() }));
+  if (nuevos.length) { await insertar('jugadores_privado', nuevos); n += nuevos.length; }
+  for (const j of js) { const p = priv.get(j.id); if (p && !p.token) { await actualizar('jugadores_privado', j.id, { token: nuevoToken() }); n++; } }
+  let max = Math.max(0, ...D().jugadores.map(j => Number(j.folio) || 0));
+  for (const j of js) if (!j.folio) { await actualizar('jugadores', j.id, { folio: ++max }); n++; }
+  return n;
 }
 
 function resumenEquipo(e) {
@@ -875,6 +895,8 @@ $app.addEventListener('click', ev => {
     }),
     imprimir: () => window.print(),
     'cred-todos': () => { st.credTodos = b.checked; render(); },
+    'cred-hoja-equipo': () => { st.credHoja = b.checked; render(); },
+    'generar-ids': () => seguro(async () => { const n = await generarIds(D().torneos.find(x => x.id === st.torneoId)); toast(n ? `Listo: ${n} folios o códigos nuevos` : 'Todos los jugadores ya tenían folio y código QR'); }),
     'publicar-jornada': () => seguro(async () => {
       const j = Number(b.dataset.j);
       await actualizarVarios('partidos', partidosDe(st.torneoId).filter(p => p.estado === 'borrador' && p.jornada === j).map(p => p.id), { estado: 'programado' });
