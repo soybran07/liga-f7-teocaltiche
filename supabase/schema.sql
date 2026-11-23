@@ -122,3 +122,5 @@ create policy "solo admin" on jugadores_privado for all to authenticated
 --
 -- insert into admins (user_id) select id from auth.users where email = 'TU_CORREO@ejemplo.com';
 -- ============================================================
+
+-- Después de este archivo, corre también: supabase/migracion-002-credenciales.sql

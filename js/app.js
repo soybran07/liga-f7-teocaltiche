@@ -1,4 +1,5 @@
 import { db, iniciar, insertar, actualizar, borrar, entrar, salir, exportarJSON, importarJSON, reiniciarDemo, guardarPrivado } from './db.js';
+import { vistaPerfil, vistaCredenciales, estadoPagos, suspensionActiva, folioTxt } from './credenciales.js';
 import { todosContraTodos, unirGrupos, calendarizar } from './roundrobin.js';
 import { tablaPosiciones, tablaGoleo, tablaDisciplina } from './stats.js';
 import { NOMBRE_LIGA } from './config.js';
@@ -15,6 +16,8 @@ const st = {
   abierto: null,          // partido con detalles abiertos
   equipoAbierto: null,    // equipo con plantilla abierta
   jugadorEditando: null,  // jugador en edición
+  pagosAbierto: null,     // jugador con pagos/suspensiones abiertos
+  credTodos: false,       // credenciales: incluir sin registro pagado
   vistaPrevia: null,      // partidos generados sin guardar
 };
 const guardarPref = () => { try { localStorage.setItem(PREF, JSON.stringify({ torneoId: st.torneoId })); } catch { } };
@@ -71,6 +74,8 @@ const grupos = eqs => [...new Set(eqs.map(e => (e.grupo || '').trim()).filter(Bo
 function ruta() {
   const h = location.hash;
   if (h.startsWith('#/admin')) return 'admin';
+  if (h.startsWith('#/j/')) return 'perfil';
+  if (h.startsWith('#/credenciales/')) return 'credenciales';
   if (h.startsWith('#/varonil')) return 'varonil';
   if (h.startsWith('#/femenil')) return 'femenil';
   return 'inicio';
@@ -88,6 +93,11 @@ function render() {
     aviso.hidden = false;
     aviso.textContent = 'Modo demo: los datos se guardan solo en este navegador. Conecta Supabase (ver LEEME) para guardarlos en la nube y publicarlos.';
   } else aviso.hidden = true;
+  if (r === 'perfil') { $app.innerHTML = vistaPerfil(decodeURIComponent(location.hash.slice(4))); return; }
+  if (r === 'credenciales') {
+    $app.innerHTML = db.esAdmin ? vistaCredenciales(location.hash.slice('#/credenciales/'.length), st.credTodos) : vistaAdmin();
+    return;
+  }
   $app.innerHTML = r === 'admin' ? vistaAdmin() : r === 'inicio' ? vistaInicio() : vistaPublica();
   window.scrollTo?.(0, 0);
 }
@@ -259,7 +269,8 @@ function vistaAdmin() {
     : [['torneos', 'Torneos'], ['respaldo', 'Respaldo']];
   if (!lista.some(([id]) => id === st.tabAdmin)) st.tabAdmin = 'torneos';
   const cuerpo = { resultados: admResultados, equipos: admEquipos, generar: admGenerar, torneos: admTorneos, respaldo: admRespaldo }[st.tabAdmin](t);
-  return cab + tabs(lista, st.tabAdmin, 'tabAdmin') + cuerpo;
+  const aviso = db.faltaMigracion ? `<div class="card" style="border-color:#f5c518"><b>Falta un paso en Supabase:</b> para usar credenciales, pagos y suspensiones corre una vez el archivo <code>supabase/migracion-002-credenciales.sql</code> en Supabase &gt; SQL Editor.</div>` : '';
+  return cab + aviso + tabs(lista, st.tabAdmin, 'tabAdmin') + cuerpo;
 }
 
 // ----- Torneos -----
@@ -275,6 +286,7 @@ function formTorneo(t = {}) {
     <div class="campo"><label>Multa amarilla ($)</label><input name="multa_amarilla" type="number" min="0" value="${t.multa_amarilla ?? 30}"></div>
     <div class="campo"><label>Multa roja ($)</label><input name="multa_roja" type="number" min="0" value="${t.multa_roja ?? 50}"></div>
     <div class="campo"><label>Multa azul ($)</label><input name="multa_azul" type="number" min="0" value="${t.multa_azul ?? 10}"></div>
+    <div class="campo"><label>Registro por jugador ($)</label><input name="cuota_registro" type="number" min="0" value="${t.cuota_registro ?? 50}"></div>
   </div><button class="btn" type="submit">${t.id ? 'Guardar cambios' : 'Crear torneo'}</button></form>`;
 }
 
@@ -303,9 +315,10 @@ function admEquipos(t) {
         <div class="campo"><label>Teléfono</label><input name="telefono" value="${esc(e.telefono || '')}"></div>
       </div><div class="fila"><button class="btn chico" type="submit">Guardar</button>
       <button class="btn sec chico" type="button" data-act="plantilla" data-id="${e.id}">${abierto ? 'Ocultar' : 'Ver'} jugadores (${js.length})</button>
+      <a class="btn sec chico" href="#/credenciales/${e.id}">🪪 Credenciales</a>
       <button class="btn peligro chico" type="button" data-act="borrar-equipo" data-id="${e.id}">Borrar equipo</button></div></form>
       ${abierto ? `<h3>Jugadores</h3>
-        ${js.length ? `<div class="tabla-wrap"><table><thead><tr><th>Núm.</th><th class="izq">Nombre</th><th class="izq">CURP (privado)</th><th>Nacimiento (privado)</th><th class="izq">Revisión</th><th>Activo</th><th></th></tr></thead><tbody>
+        ${js.length ? `<div class="tabla-wrap"><table><thead><tr><th>Núm.</th><th class="izq">Nombre</th><th class="izq">CURP (privado)</th><th>Nacimiento (privado)</th><th class="izq">Revisión</th><th class="izq">Credencial y pagos</th><th>Activo</th><th></th></tr></thead><tbody>
         ${js.map(j => filaJugador(j, priv.get(j.id) || {}, t)).join('')}
         </tbody></table></div>` : '<p class="muted">Sin jugadores todavía.</p>'}
         <form data-form="jugador" data-equipo="${e.id}" style="margin-top:10px"><div class="form-grid">
@@ -339,16 +352,59 @@ function filaJugador(j, p, t) {
       <td class="izq"><input ${f} name="curp" maxlength="18" value="${esc(p.curp || '')}" style="text-transform:uppercase;min-width:190px"></td>
       <td><input ${f} name="fecha_nac" type="date" value="${esc(p.fecha_nac || '')}"></td>
       <td class="izq muted" style="white-space:normal;font-size:12px">Si dejas la fecha vacía se toma la de la CURP.</td>
-      <td></td>
+      <td></td><td></td>
       <td><form id="ej-${j.id}" data-form="jugador-editar" data-id="${j.id}" class="fila" style="flex-wrap:nowrap">
         <button class="btn chico" type="submit">Guardar</button><button class="btn sec chico" type="button" data-act="editar-jugador" data-id="">Cancelar</button></form></td></tr>`;
   }
   const avisos = revisarJugador(p, t.categoria);
   return `<tr><td>${j.numero ?? ''}</td><td class="izq">${esc(j.nombre)}</td><td class="izq">${esc(p.curp || '')}</td><td>${esc(p.fecha_nac || '')}</td>
     <td class="izq" style="white-space:normal;font-size:12px;${avisos.length ? 'color:var(--rojo)' : 'color:var(--verde)'}">${avisos.length ? avisos.map(esc).join('<br>') : '✓ OK'}</td>
+    <td class="izq">${celdaCredencial(j)}</td>
     <td><input type="checkbox" data-act="activo-jugador" data-id="${j.id}" ${j.activo !== false ? 'checked' : ''}></td>
     <td class="fila" style="flex-wrap:nowrap"><button class="btn sec chico" data-act="editar-jugador" data-id="${j.id}">Editar</button>
-    <button class="btn peligro chico" data-act="borrar-jugador" data-id="${j.id}">Quitar</button></td></tr>`;
+    <button class="btn peligro chico" data-act="borrar-jugador" data-id="${j.id}">Quitar</button></td></tr>
+    ${st.pagosAbierto === j.id ? `<tr><td colspan="8" class="izq" style="white-space:normal">${panelPagos(j, t)}</td></tr>` : ''}`;
+}
+
+function celdaCredencial(j) {
+  if (db.faltaMigracion) return '<span class="muted" style="font-size:12px">Falta migración</span>';
+  const pg = estadoPagos(j), susp = suspensionActiva(j);
+  return `<div style="display:flex;flex-direction:column;gap:3px;font-size:12px">
+    <label style="margin:0;display:flex;gap:5px;align-items:center;color:inherit"><input type="checkbox" data-act="registro" data-id="${j.id}" ${pg.registro ? 'checked' : ''}> Registro pagado</label>
+    <label style="margin:0;display:flex;gap:5px;align-items:center;color:inherit"><input type="checkbox" data-act="docs" data-id="${j.id}" ${j.docs_verificados ? 'checked' : ''}> Docs verificados</label>
+    <span>${pg.adeudo ? `<b style="color:#ffd166">Debe $${pg.adeudo}</b>` : '<span style="color:var(--verde)">Sin adeudo</span>'}${susp ? ` · <b style="color:var(--rojo)">Susp. ${susp.restantes}</b>` : ''} · ${folioTxt(j)}</span>
+    <div class="fila" style="gap:4px;flex-wrap:nowrap"><button class="btn sec chico" data-act="pagos" data-id="${j.id}">Pagos</button>
+      <button class="btn sec chico" data-act="ver-perfil" data-id="${j.id}">Perfil</button>
+      <a class="btn sec chico" href="#/credenciales/j/${j.id}">Imprimir</a></div></div>`;
+}
+
+const CONCEPTOS = { registro: 'Registro', inscripcion: 'Inscripción', arbitraje: 'Arbitraje', multa: 'Multa', otro: 'Otro' };
+function panelPagos(j, t) {
+  const pg = D().pagos.filter(g => g.jugador_id === j.id).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+  const ss = D().suspensiones.filter(x => x.jugador_id === j.id);
+  const susp = suspensionActiva(j);
+  return `<div class="card" style="margin:6px 0">
+    <h3 style="margin-top:0">Pagos y adeudos de ${esc(j.nombre)}</h3>
+    ${pg.length ? `<table><thead><tr><th class="izq">Concepto</th><th>Monto</th><th>Fecha</th><th>Pagado</th><th class="izq">Notas</th><th></th></tr></thead><tbody>
+      ${pg.map(g => `<tr><td class="izq">${CONCEPTOS[g.concepto] || g.concepto}</td><td>$${g.monto}</td><td>${esc(g.fecha || '')}</td>
+        <td><input type="checkbox" data-act="pago-pagado" data-id="${g.id}" ${g.pagado ? 'checked' : ''}></td><td class="izq">${esc(g.notas || '')}</td>
+        <td><button class="btn peligro chico" data-act="borrar-pago" data-id="${g.id}">x</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">Sin cargos.</p>'}
+    <form data-form="pago" data-jugador="${j.id}" style="margin-top:8px"><div class="form-grid">
+      <div class="campo"><label>Concepto</label><select name="concepto">${Object.entries(CONCEPTOS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div class="campo"><label>Monto ($)</label><input name="monto" type="number" min="0" required></div>
+      <div class="campo"><label>Notas</label><input name="notas"></div>
+      <div class="campo"><label style="display:flex;gap:5px;align-items:center"><input type="checkbox" name="pagado"> Ya pagado</label><button class="btn chico" type="submit">Agregar cargo</button></div>
+    </div></form>
+    <h3>Suspensiones ${susp ? `<span class="badge" style="background:rgba(255,80,80,.3)">vigente: faltan ${susp.restantes}</span>` : ''}</h3>
+    ${ss.length ? `<ul style="margin:0 0 8px;padding-left:18px">${ss.map(x => `<li>${x.partidos} partido(s) · ${esc(x.motivo || '')} · desde ${esc(x.fecha || '')}
+      <button class="btn peligro chico" data-act="borrar-susp" data-id="${x.id}">x</button></li>`).join('')}</ul>` : '<p class="muted">Sin suspensiones.</p>'}
+    <form data-form="suspension" data-jugador="${j.id}"><div class="form-grid">
+      <div class="campo"><label>Partidos de suspensión</label><input name="partidos" type="number" min="1" value="1" required></div>
+      <div class="campo"><label>Motivo</label><input name="motivo" placeholder="Ej. agresión verbal"></div>
+      <div class="campo"><button class="btn chico" type="submit">Agregar suspensión</button></div>
+    </div></form>
+    <p class="muted" style="font-size:12px">Las multas por tarjeta y las suspensiones por roja o doble amarilla se crean solas al capturar el partido. La suspensión se da por cumplida cuando su equipo juega esos partidos.</p>
+  </div>`;
 }
 
 function resumenRevision(t, eqs, priv) {
@@ -497,6 +553,28 @@ $app.addEventListener('click', ev => {
       document.getElementById('ej-' + id)?.closest('tr')?.scrollIntoView({ block: 'center' }); },
     'borrar-jugador': () => confirm('¿Quitar a este jugador? También se borran sus goles y tarjetas.') && seguro(() => borrar('jugadores', id)),
     'activo-jugador': () => seguro(() => actualizar('jugadores', id, { activo: b.checked })),
+    registro: () => seguro(async () => {
+      const g = D().pagos.find(x => x.jugador_id === id && x.concepto === 'registro');
+      if (g) await actualizar('pagos', g.id, { pagado: b.checked });
+      else {
+        const j = D().jugadores.find(x => x.id === id);
+        const t = D().torneos.find(x => x.id === D().equipos.find(e => e.id === j.equipo_id)?.torneo_id);
+        await insertar('pagos', { jugador_id: id, concepto: 'registro', monto: Number(t?.cuota_registro ?? 50), pagado: b.checked, fecha: hoyISO() });
+      }
+      toast(b.checked ? 'Registro marcado como pagado' : 'Registro pendiente');
+    }),
+    docs: () => seguro(() => actualizar('jugadores', id, { docs_verificados: b.checked })),
+    pagos: () => { st.pagosAbierto = st.pagosAbierto === id ? null : id; render(); },
+    'pago-pagado': () => seguro(() => actualizar('pagos', id, { pagado: b.checked })),
+    'borrar-pago': () => confirm('¿Borrar este cargo?') && seguro(() => borrar('pagos', id)),
+    'borrar-susp': () => confirm('¿Quitar esta suspensión?') && seguro(() => borrar('suspensiones', id)),
+    'ver-perfil': () => seguro(async () => {
+      const { tokenDe } = await import('./db.js');
+      const tk = await tokenDe(id);
+      window.open(location.pathname + '#/j/' + tk, '_blank');
+    }),
+    imprimir: () => window.print(),
+    'cred-todos': () => { st.credTodos = b.checked; render(); },
     'guardar-jornadas': () => seguro(async () => {
       await insertar('partidos', st.vistaPrevia.map(p => ({ ...p, torneo_id: st.torneoId, estado: 'programado' })));
       toast(`${st.vistaPrevia.length} partidos guardados`); st.vistaPrevia = null; st.tabAdmin = 'resultados'; st.jornadaAdmin = null;
@@ -545,6 +623,7 @@ $app.addEventListener('submit', ev => {
       const fila = { nombre: d.nombre.trim(), categoria: d.categoria, temporada: d.temporada, sede: d.sede,
         pts_victoria: Number(d.pts_victoria), pts_empate: Number(d.pts_empate),
         multa_amarilla: Number(d.multa_amarilla), multa_roja: Number(d.multa_roja), multa_azul: Number(d.multa_azul) };
+      if (!db.faltaMigracion) fila.cuota_registro = Number(d.cuota_registro);
       if (f.dataset.id) { await actualizar('torneos', f.dataset.id, fila); toast('Torneo guardado'); }
       else { const [n] = await insertar('torneos', { ...fila, activo: true }); st.torneoId = n.id; guardarPref(); st.tabAdmin = 'equipos'; toast('Torneo creado; ahora agrega equipos'); }
     }),
@@ -617,7 +696,30 @@ $app.addEventListener('submit', ev => {
     }),
     evento: () => seguro(async () => {
       const j = D().jugadores.find(x => x.id === d.jugador_id);
-      await insertar('eventos', { partido_id: f.dataset.partido, jugador_id: d.jugador_id, equipo_id: j.equipo_id, tipo: d.tipo, minuto: numONull(d.minuto) });
+      const [ev] = await insertar('eventos', { partido_id: f.dataset.partido, jugador_id: d.jugador_id, equipo_id: j.equipo_id, tipo: d.tipo, minuto: numONull(d.minuto) });
+      if (d.tipo === 'gol' || db.faltaMigracion) return;
+      const t = torneo(null);
+      const tor = D().torneos.find(x => x.id === D().equipos.find(e => e.id === j.equipo_id)?.torneo_id) || t;
+      const monto = Number(tor?.['multa_' + d.tipo] ?? 0);
+      const partido = D().partidos.find(p => p.id === f.dataset.partido);
+      const fecha = partido?.fecha || hoyISO();
+      if (monto) await insertar('pagos', { jugador_id: j.id, evento_id: ev.id, concepto: 'multa', monto, pagado: false, fecha, notas: 'Tarjeta ' + d.tipo });
+      const amarillas = D().eventos.filter(x => x.partido_id === f.dataset.partido && x.jugador_id === j.id && x.tipo === 'amarilla').length;
+      let motivo = null;
+      if (d.tipo === 'roja') motivo = 'Tarjeta roja';
+      else if (d.tipo === 'amarilla' && amarillas === 2) motivo = 'Doble amarilla';
+      if (motivo) {
+        await insertar('suspensiones', { jugador_id: j.id, partido_id: f.dataset.partido, partidos: 1, fecha, motivo });
+        toast(`${motivo}: multa de $${monto} y 1 partido de suspensión (puedes ajustarlo en Pagos del jugador)`);
+      } else if (monto) toast(`Multa de $${monto} registrada`);
+    }),
+    pago: () => seguro(async () => {
+      await insertar('pagos', { jugador_id: f.dataset.jugador, concepto: d.concepto, monto: Number(d.monto), pagado: !!d.pagado, notas: d.notas, fecha: hoyISO() });
+      toast('Cargo agregado');
+    }),
+    suspension: () => seguro(async () => {
+      await insertar('suspensiones', { jugador_id: f.dataset.jugador, partidos: Number(d.partidos), motivo: d.motivo, fecha: hoyISO() });
+      toast('Suspensión agregada');
     }),
   };
   formularios[tipo]?.();

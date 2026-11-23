@@ -1,11 +1,13 @@
 // Capa de datos: Supabase (nube) o localStorage (modo demo).
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-export const TABLAS = ['torneos', 'equipos', 'jugadores', 'jugadores_privado', 'partidos', 'eventos'];
-const SOLO_ADMIN = new Set(['jugadores_privado']);
+export const TABLAS = ['torneos', 'equipos', 'jugadores', 'jugadores_privado', 'partidos', 'eventos', 'pagos', 'suspensiones'];
+const SOLO_ADMIN = new Set(['jugadores_privado', 'pagos']);
 const LS_KEY = 'f7teo-datos-v1';
 
-export const db = { modo: 'demo', data: {}, user: null, esAdmin: false, client: null };
+export const db = { modo: 'demo', data: {}, user: null, esAdmin: false, client: null, faltaMigracion: false };
+
+export const nuevoToken = () => uuid().replace(/-/g, '').slice(0, 12);
 
 export const uuid = () =>
   (crypto.randomUUID ? crypto.randomUUID()
@@ -28,7 +30,7 @@ function semilla() {
   return {
     torneos: [torneo],
     equipos: nombres.map(nombre => ({ id: uuid(), torneo_id: torneo.id, nombre, grupo: '', delegado: '', telefono: '' })),
-    jugadores: [], jugadores_privado: [], partidos: [], eventos: [],
+    jugadores: [], jugadores_privado: [], partidos: [], eventos: [], pagos: [], suspensiones: [],
   };
 }
 
@@ -66,6 +68,7 @@ export async function cargarTodo() {
     const filas = [];
     for (let desde = 0; ; desde += 1000) {
       const { data, error } = await db.client.from(t).select('*').order('created_at').range(desde, desde + 999);
+      if (error && (t === 'pagos' || t === 'suspensiones')) { db.faltaMigracion = true; break; }
       if (error) throw new Error(`No se pudo leer ${t}: ${error.message}`);
       filas.push(...data);
       if (data.length < 1000) break;
@@ -128,20 +131,47 @@ function cascadaLocal(tabla, id) {
   } else if (tabla === 'equipos') {
     d.jugadores.filter(j => j.equipo_id === id).forEach(j => cascadaLocal('jugadores', j.id));
     d.partidos.filter(p => p.local_id === id || p.visita_id === id).forEach(p => cascadaLocal('partidos', p.id));
-    d.eventos = d.eventos.filter(e => e.equipo_id !== id);
+    d.eventos.filter(e => e.equipo_id === id).forEach(e => cascadaLocal('eventos', e.id));
+    d.pagos = d.pagos.filter(g => g.equipo_id !== id);
   } else if (tabla === 'jugadores') {
     d.jugadores_privado = d.jugadores_privado.filter(x => x.id !== id);
-    d.eventos = d.eventos.filter(e => e.jugador_id !== id);
+    d.eventos.filter(e => e.jugador_id === id).forEach(e => cascadaLocal('eventos', e.id));
+    d.pagos = d.pagos.filter(g => g.jugador_id !== id);
+    d.suspensiones = d.suspensiones.filter(x => x.jugador_id !== id);
   } else if (tabla === 'partidos') {
-    d.eventos = d.eventos.filter(e => e.partido_id !== id);
+    d.eventos.filter(e => e.partido_id === id).forEach(e => cascadaLocal('eventos', e.id));
+    d.suspensiones.forEach(x => { if (x.partido_id === id) x.partido_id = null; });
+  } else if (tabla === 'eventos') {
+    d.pagos = d.pagos.filter(g => g.evento_id !== id);
   }
 }
 
 // Guarda CURP / fecha de nacimiento (crea o actualiza).
-export async function guardarPrivado(id, datos) {
-  if (db.data.jugadores_privado.some(x => x.id === id)) return actualizar('jugadores_privado', id, datos);
-  if (!datos.curp && !datos.fecha_nac) return;
-  return insertar('jugadores_privado', { id, ...datos });
+export async function guardarPrivado(id, datos = {}) {
+  const fila = db.data.jugadores_privado.find(x => x.id === id);
+  if (fila) return actualizar('jugadores_privado', id, fila.token ? datos : { ...datos, token: nuevoToken() });
+  return insertar('jugadores_privado', { id, token: nuevoToken(), ...datos });
+}
+
+// Código del QR de un jugador; lo crea si no existe.
+export async function tokenDe(id) {
+  const fila = db.data.jugadores_privado.find(x => x.id === id);
+  if (fila?.token) return fila.token;
+  await guardarPrivado(id, {});
+  return db.data.jugadores_privado.find(x => x.id === id).token;
+}
+
+// Perfil público por código QR: { jugador_id, registro_pagado, con_adeudo } o null.
+export async function perfilPorToken(token) {
+  if (db.modo === 'demo') {
+    const p = db.data.jugadores_privado.find(x => x.token === token);
+    if (!p) return null;
+    const pg = db.data.pagos.filter(g => g.jugador_id === p.id);
+    return { jugador_id: p.id, registro_pagado: pg.some(g => g.concepto === 'registro' && g.pagado), con_adeudo: pg.some(g => !g.pagado) };
+  }
+  const { data, error } = await db.client.rpc('perfil_por_token', { t: token });
+  if (error) throw new Error('No se pudo validar la credencial: ' + error.message);
+  return data;
 }
 
 export async function entrar(email, password) {

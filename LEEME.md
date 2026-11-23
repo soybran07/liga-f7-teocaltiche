@@ -66,6 +66,13 @@ En el modo demo ve a **Administrar > Respaldo > Descargar respaldo**. Ya con Sup
 | `js/stats.js` | Tabla de posiciones, goleo y disciplina. |
 | `supabase/schema.sql` | Tablas y reglas de seguridad de la base de datos. |
 
+## Credenciales con QR
+- Corre una vez `supabase/migracion-002-credenciales.sql` en Supabase.
+- En **Equipos y jugadores** marca "Registro pagado" y "Docs verificados", revisa pagos y suspensiones con el botón **Pagos**.
+- Botón **🪪 Credenciales** del equipo (o **Imprimir** por jugador): hoja carta con tiras de 17.2 × 5.4 cm para doblar (8.6 × 5.4 cm). Imprime a escala 100% en opalina.
+- El QR abre `#/j/CODIGO`: estado (activo, suspendido, registro pendiente), goles, tarjetas, "al corriente / con adeudo" y documentos. Nunca muestra montos ni CURP.
+- Las multas por tarjeta y la suspensión por roja o doble amarilla se generan solas al capturar el partido.
+
 ## Siguientes ideas
 - Imagen del rol semanal lista para compartir en WhatsApp.
 - Control de pagos (inscripción $350, registro $50, arbitraje por partido) y adeudos por equipo.
