@@ -396,3 +396,10 @@ a { color: var(--verde); }
   .ced-hoja { box-shadow: none; margin: 0; width: 100%; min-height: 0; height: 199mm; padding: 0; zoom: 1; break-inside: avoid; }
   .ced-falta.shoot, .ced-tabla th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---------- Panel del capitán ---------- */
+.cap-cifras { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 760px) { .cap-cifras { grid-template-columns: repeat(3, 1fr); } }
+.cap-dos { display: grid; grid-template-columns: 1.6fr 1fr; gap: 12px; }
+.cap-dos > .card { margin: 0; }
+@media (max-width: 760px) { .cap-dos { grid-template-columns: 1fr; } }

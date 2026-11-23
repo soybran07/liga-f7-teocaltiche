@@ -1,6 +1,6 @@
 import { db, iniciar, insertar, actualizar, actualizarVarios, borrar, entrar, salir, exportarJSON, importarJSON, reiniciarDemo, guardarPrivado, tokenDe, sincronizar, usuarios } from './db.js';
 import { vistaPerfil, vistaCredenciales, estadoPagos, suspensionActiva, folioTxt } from './credenciales.js';
-import { vistaCedula } from './cedula.js';
+import { vistaCedula, puedeJugar } from './cedula.js';
 import { unirGrupos, calendarizar, enfrentamientos, acomodarEnJornadas, equilibrarLocalia } from './roundrobin.js';
 const claveP = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 import { tablaPosiciones, tablaGoleo, tablaDisciplina } from './stats.js';
@@ -102,9 +102,9 @@ function render() {
     aviso.textContent = 'Modo demo: los datos se guardan solo en este navegador. Conecta Supabase (ver LEEME) para guardarlos en la nube y publicarlos.';
   } else aviso.hidden = true;
   if (r === 'perfil') { $app.innerHTML = vistaPerfil(decodeURIComponent(location.hash.slice(4))); return; }
-  if (r === 'cedula') { $app.innerHTML = db.esAdmin ? vistaCedula(location.hash.slice('#/cedula/'.length)) : vistaAdmin(); return; }
+  if (r === 'cedula') { $app.innerHTML = esStaff() ? vistaCedula(location.hash.slice('#/cedula/'.length)) : vistaAdmin(); return; }
   if (r === 'credenciales') {
-    $app.innerHTML = db.esAdmin ? vistaCredenciales(location.hash.slice('#/credenciales/'.length), st.credTodos) : vistaAdmin();
+    $app.innerHTML = esStaff() ? vistaCredenciales(location.hash.slice('#/credenciales/'.length), st.credTodos) : vistaAdmin();
     return;
   }
   $app.innerHTML = r === 'admin' ? vistaAdmin() : r === 'inicio' ? vistaInicio() : vistaPublica();
@@ -262,6 +262,9 @@ function pubEquipos(t) {
 }
 
 // ================= VISTA ADMIN =================
+const esStaff = () => db.esAdmin && db.rol !== 'capitan';
+const esPresidente = () => db.rol === 'admin';
+
 function vistaAdmin() {
   if (db.modo === 'supabase' && !db.esAdmin) {
     return `<div class="card" style="max-width:380px;margin:20px auto"><h1>Entrar como administrador</h1>
@@ -269,6 +272,7 @@ function vistaAdmin() {
       <div class="campo"><label>Contraseña</label><input name="password" type="password" required autocomplete="current-password"></div>
       <button class="btn" type="submit">Entrar</button></form></div>`;
   }
+  if (db.rol === 'capitan') return vistaCapitan();
   const t = torneo();
   const ROLES = { admin: 'Administrador', finanzas: 'Finanzas', captura: 'Captura de resultados' };
   const cab = `<div class="fila entre"><h1>Administrar${t ? ': ' + esc(t.nombre) : ''} <span class="badge">${ROLES[db.rol] || ''}</span></h1><div class="fila">${selectorTorneo()}
@@ -325,7 +329,8 @@ function admEquipos(t) {
     const esAdm = db.rol === 'admin';
     const botones = `<button class="btn sec chico" type="button" data-act="plantilla" data-id="${e.id}">${abierto ? 'Ocultar' : 'Ver'} jugadores (${js.length})</button>
       ${db.faltaMigracion ? '' : `<button class="btn sec chico" type="button" data-act="pagos-equipo" data-id="${e.id}">Fianza y pagos del equipo</button>
-      <a class="btn sec chico" href="#/credenciales/${e.id}">🪪 Credenciales</a>`}`;
+      <a class="btn sec chico" href="#/credenciales/${e.id}">🪪 Credenciales</a>`}
+      ${esAdm && db.modo === 'supabase' ? `<button class="btn sec chico" type="button" data-act="usuario-capitan" data-id="${e.id}">👤 Usuario del capitán</button>` : ''}`;
     return `<div class="card">
       ${esAdm ? '' : `<div class="fila entre"><h3 style="margin:0">${esc(e.nombre)}</h3><div class="fila">${botones}</div></div>`}
       ${db.faltaMigracion ? '' : resumenEquipo(e)}
@@ -386,7 +391,7 @@ function panelPagosEquipo(e) {
     ${pg.length ? `<table><thead><tr><th class="izq">Concepto</th><th>Monto</th><th>Fecha</th><th>Pagado</th><th class="izq">Notas</th><th></th></tr></thead><tbody>
       ${pg.map(g => `<tr><td class="izq">${CONCEPTOS[g.concepto] || g.concepto}</td><td>$${g.monto}</td><td>${esc(g.fecha || '')}</td>
         <td><input type="checkbox" data-act="pago-pagado" data-id="${g.id}" ${g.pagado ? 'checked' : ''}></td><td class="izq">${esc(g.notas || '')}</td>
-        <td><button class="btn peligro chico" data-act="borrar-pago" data-id="${g.id}">x</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">Sin cargos del equipo.</p>'}
+        <td>${esPresidente() ? `<button class="btn peligro chico" data-act="borrar-pago" data-id="${g.id}">x</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Sin cargos del equipo.</p>'}
     <form data-form="pago-equipo" data-equipo="${e.id}" style="margin-top:8px"><div class="form-grid">
       <div class="campo"><label>Concepto</label><select name="concepto">${['fianza', 'inscripcion', 'arbitraje', 'otro'].map(k => `<option value="${k}">${CONCEPTOS[k]}</option>`).join('')}</select></div>
       <div class="campo"><label>Monto ($)</label><input name="monto" type="number" min="0" required></div>
@@ -439,7 +444,7 @@ function panelPagos(j, t) {
     ${pg.length ? `<table><thead><tr><th class="izq">Concepto</th><th>Monto</th><th>Fecha</th><th>Pagado</th><th class="izq">Notas</th><th></th></tr></thead><tbody>
       ${pg.map(g => `<tr><td class="izq">${CONCEPTOS[g.concepto] || g.concepto}</td><td>$${g.monto}</td><td>${esc(g.fecha || '')}</td>
         <td><input type="checkbox" data-act="pago-pagado" data-id="${g.id}" ${g.pagado ? 'checked' : ''}></td><td class="izq">${esc(g.notas || '')}</td>
-        <td><button class="btn peligro chico" data-act="borrar-pago" data-id="${g.id}">x</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">Sin cargos.</p>'}
+        <td>${esPresidente() ? `<button class="btn peligro chico" data-act="borrar-pago" data-id="${g.id}">x</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Sin cargos.</p>'}
     <form data-form="pago" data-jugador="${j.id}" style="margin-top:8px"><div class="form-grid">
       <div class="campo"><label>Concepto</label><select name="concepto">${Object.entries(CONCEPTOS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       <div class="campo"><label>Monto ($)</label><input name="monto" type="number" min="0" required></div>
@@ -448,7 +453,7 @@ function panelPagos(j, t) {
     </div></form>
     <h3>Suspensiones ${susp ? `<span class="badge" style="background:rgba(255,80,80,.3)">vigente: faltan ${susp.restantes}</span>` : ''}</h3>
     ${ss.length ? `<ul style="margin:0 0 8px;padding-left:18px">${ss.map(x => `<li>${x.partidos} partido(s) · ${esc(x.motivo || '')} · desde ${esc(x.fecha || '')}
-      <button class="btn peligro chico" data-act="borrar-susp" data-id="${x.id}">x</button></li>`).join('')}</ul>` : '<p class="muted">Sin suspensiones.</p>'}
+      ${esPresidente() ? `<button class="btn peligro chico" data-act="borrar-susp" data-id="${x.id}">x</button>` : ''}</li>`).join('')}</ul>` : '<p class="muted">Sin suspensiones.</p>'}
     <form data-form="suspension" data-jugador="${j.id}"><div class="form-grid">
       <div class="campo"><label>Partidos de suspensión</label><input name="partidos" type="number" min="1" value="1" required></div>
       <div class="campo"><label>Motivo</label><input name="motivo" placeholder="Ej. agresión verbal"></div>
@@ -636,7 +641,7 @@ function abrirCaptura(id) {
   D().eventos.filter(e => e.partido_id === id).forEach(e => { (c[e.jugador_id] ||= { gol: 0, amarilla: 0, roja: 0, azul: 0 })[e.tipo]++; });
   const golesEv = eqId => D().eventos.filter(e => e.partido_id === id && e.tipo === 'gol' && e.equipo_id === eqId).length;
   const manual = p.estado === 'jugado' && (Number(p.goles_local) !== golesEv(p.local_id) || Number(p.goles_visita) !== golesEv(p.visita_id));
-  st.cap = { id, c, manual, gl: p.goles_local ?? 0, gv: p.goles_visita ?? 0 };
+  st.cap = { id, c, base: JSON.parse(JSON.stringify(c)), manual, gl: p.goles_local ?? 0, gv: p.goles_visita ?? 0 };
   window.scrollTo?.(0, 0);
 }
 
@@ -657,7 +662,7 @@ function pantallaCaptura() {
     return `<div class="card"><h3 style="margin-top:0">${esc(eq.get(eqId)?.nombre)}</h3>
       ${js.length ? `<div class="tabla-wrap"><table class="cap-tabla"><thead><tr><th class="izq">Jugador</th><th>⚽ Goles</th><th><span class="tarjeta amarilla"></span></th><th><span class="tarjeta roja"></span></th><th><span class="tarjeta azul"></span></th></tr></thead><tbody>
       ${js.map(j => { const v = st.cap.c[j.id] || {}; return `<tr><td class="izq"><span class="muted">${j.numero ?? ''}</span> ${esc(j.nombre)}</td>
-        ${TIPOS.map(tp => `<td><div class="paso"><button type="button" data-act="cap-menos" data-id="${j.id}" data-tipo="${tp}" ${!v[tp] ? 'disabled' : ''}>−</button>
+        ${TIPOS.map(tp => `<td><div class="paso"><button type="button" data-act="cap-menos" data-id="${j.id}" data-tipo="${tp}" ${(v[tp] || 0) <= (esPresidente() ? 0 : (st.cap.base[j.id]?.[tp] || 0)) ? 'disabled' : ''}>−</button>
           <b class="${v[tp] ? 'con' : ''}">${v[tp] || 0}</b><button type="button" data-act="cap-mas" data-id="${j.id}" data-tipo="${tp}">+</button></div></td>`).join('')}</tr>`; }).join('')}
       </tbody></table></div>` : '<p class="muted">Este equipo no tiene jugadores registrados.</p>'}</div>`;
   };
@@ -670,7 +675,7 @@ function pantallaCaptura() {
     </div>
     <div class="cap-cols">${columna(p.local_id)}${columna(p.visita_id)}</div>
     <div class="fila" style="justify-content:center;margin:10px 0 20px"><button class="btn" data-act="cap-guardar">Guardar resultado</button><button class="btn sec" data-act="cap-cancelar">Cancelar</button></div>
-    <p class="muted" style="text-align:center;font-size:13px">Cada tarjeta genera su multa; la roja o la segunda amarilla generan 1 partido de suspensión.</p>`;
+    <p class="muted" style="text-align:center;font-size:13px">Cada tarjeta genera su multa; la roja o la segunda amarilla generan 1 partido de suspensión.${esPresidente() ? '' : '<br>Puedes agregar goles y tarjetas; para quitar algo que ya estaba guardado, pídeselo al presidente.'}</p>`;
 }
 
 // Registra un gol o tarjeta, con su multa y suspensión automática.
@@ -711,9 +716,65 @@ async function guardarCaptura() {
   toast(`Resultado guardado: ${gl} – ${gv}${avisos.length ? ' · Suspensiones: ' + avisos.join(', ') : ''}`);
 }
 
+// ----- Panel del capitán: todo sobre su equipo (solo lectura) -----
+function vistaCapitan() {
+  const e = D().equipos.find(x => x.id === db.equipoId);
+  const cab = `<div class="fila entre"><h1>Mi equipo${e ? ': ' + esc(e.nombre) : ''} <span class="badge">Capitán</span></h1></div>`;
+  if (!e) return cab + `<div class="card vacio">Tu usuario todavía no tiene un equipo asignado. Pídele al presidente que te lo asigne en el Panel de control.</div>`;
+  const t = D().torneos.find(x => x.id === e.torneo_id);
+  const eqs = equiposDe(t.id), eq = mapa(eqs);
+  const ps = partidosDe(t.id).filter(p => p.estado !== 'borrador');
+  const tabla = tablaPosiciones(t, eqs, ps);
+  const pos = tabla.findIndex(f => f.equipo.id === e.id), yo = tabla[pos];
+  const js = jugadoresDe(e.id);
+  const activos = js.filter(j => j.activo !== false);
+  const info = activos.map(j => ({ j, ep: estadoPagos(j), pj: puedeJugar(j), tj: { gol: 0, amarilla: 0, roja: 0, azul: 0 } }));
+  D().eventos.forEach(ev => { const x = info.find(i => i.j.id === ev.jugador_id); if (x) x.tj[ev.tipo]++; });
+  const sinReg = info.filter(x => !x.ep.registro);
+  const pgEq = D().pagos.filter(g => g.equipo_id === e.id && !g.jugador_id);
+  const debeEq = pgEq.filter(g => !g.pagado).reduce((a, g) => a + Number(g.monto), 0);
+  const debeJug = info.reduce((a, x) => a + x.ep.adeudo, 0) + sinReg.length * 0;
+  const cuotaReg = Number(t.cuota_registro ?? 50);
+  const faltaReg = sinReg.filter(x => !x.ep.pendientes.some(g => g.concepto === 'registro')).length * cuotaReg;
+  const pueden = info.filter(x => x.pj.ok).length;
+  const $ = n => '$' + Number(n).toLocaleString('es-MX');
+  const cifra = (v, txt, mal) => `<div><b style="${mal ? 'color:#ffb3b3' : ''}">${v}</b><span>${txt}</span></div>`;
+  const resumen = `<div class="card perfil-cifras cap-cifras">${cifra(yo ? pos + 1 + '°' : '—', 'Lugar en la tabla')}${cifra(yo?.pts ?? 0, 'Puntos')}
+    ${cifra(activos.length, 'Jugadores')}${cifra(pueden, 'Pueden jugar')}${cifra(sinReg.length, 'Sin registro pagado', sinReg.length)}${cifra($(debeEq + debeJug + faltaReg), 'Adeudo total', debeEq + debeJug + faltaReg)}</div>`;
+  const CONC = { registro: 'Registro', inscripcion: 'Inscripción', arbitraje: 'Arbitraje', multa: 'Multa', fianza: 'Fianza', otro: 'Otro' };
+  const lineaPago = g => `<tr><td class="izq">${CONC[g.concepto] || g.concepto}${g.notas ? ` <span class="muted">· ${esc(g.notas)}</span>` : ''}</td><td>${$(g.monto)}</td><td>${esc(g.fecha ? fmtFecha(g.fecha) : '')}</td><td>${g.pagado ? '<b style="color:#3fe39b">Pagado</b>' : '<b style="color:#ffd166">Pendiente</b>'}</td></tr>`;
+  const pagosEquipo = `<div class="card"><h2 style="margin-top:0">Pagos del equipo</h2>
+    ${pgEq.length ? `<div class="tabla-wrap"><table><thead><tr><th class="izq">Concepto</th><th>Monto</th><th>Fecha</th><th>Estado</th></tr></thead><tbody>${pgEq.map(lineaPago).join('')}</tbody></table></div>` : '<p class="muted">No hay cargos del equipo (fianza, inscripción, arbitraje).</p>'}
+    <p style="margin:8px 0 0">Adeudo del equipo: <b>${debeEq ? $(debeEq) : 'ninguno'}</b></p></div>`;
+  const filas = info.sort((a, b) => (a.j.numero ?? 999) - (b.j.numero ?? 999)).map(x => {
+    const debe = x.ep.pendientes.map(g => `${CONC[g.concepto] || g.concepto}${g.notas && g.concepto === 'multa' ? ' (' + esc(g.notas.replace(/^Tarjeta /, '')) + ')' : ''} ${$(g.monto)}`);
+    if (!x.ep.registro && !x.ep.pendientes.some(g => g.concepto === 'registro')) debe.unshift(`Registro ${$(cuotaReg)}`);
+    return `<tr><td>${x.j.numero ?? ''}</td><td class="izq">${esc(x.j.nombre)}</td>
+      <td>${x.ep.registro ? '<span style="color:#3fe39b">Pagado</span>' : '<span style="color:#ffd166">Pendiente</span>'}</td>
+      <td class="izq" style="font-size:13px">${debe.length ? debe.join('<br>') : '<span class="muted">—</span>'}</td>
+      <td>${x.tj.gol}</td><td>${x.tj.amarilla}</td><td>${x.tj.roja}</td><td>${x.tj.azul}</td>
+      <td class="izq" style="font-size:13px">${x.pj.ok ? '<b style="color:#3fe39b">Sí</b>' : `<b style="color:#ffb3b3">No</b> <span class="muted">${esc(x.pj.motivos.join(', '))}</span>`}</td></tr>`;
+  }).join('');
+  const jugadores = `<div class="card"><h2 style="margin-top:0">Jugadores</h2>
+    <p class="muted" style="margin-top:0;font-size:13px">Para jugar se necesita el registro pagado y no deber multas de amarilla o roja. Las azules no impiden jugar.</p>
+    ${filas ? `<div class="tabla-wrap"><table><thead><tr><th>#</th><th class="izq">Jugador</th><th>Registro</th><th class="izq">Debe</th><th>⚽</th><th><span class="tarjeta amarilla"></span></th><th><span class="tarjeta roja"></span></th><th><span class="tarjeta azul"></span></th><th class="izq">¿Puede jugar?</th></tr></thead><tbody>${filas}</tbody></table></div>` : '<p class="muted">Sin jugadores registrados.</p>'}</div>`;
+  const goleo = info.filter(x => x.tj.gol).sort((a, b) => b.tj.gol - a.tj.gol).slice(0, 10);
+  const goleadores = `<div class="card"><h2 style="margin-top:0">Goleadores del equipo</h2>
+    ${goleo.length ? `<table><tbody>${goleo.map((x, i) => `<tr><td>${i + 1}</td><td class="izq">${esc(x.j.nombre)}</td><td><b>${x.tj.gol}</b></td></tr>`).join('')}</tbody></table>` : '<p class="muted">Todavía sin goles.</p>'}</div>`;
+  const misPs = ps.filter(p => p.local_id === e.id || p.visita_id === e.id);
+  const prox = misPs.filter(p => p.estado === 'programado').sort((a, b) => String(a.fecha || '9').localeCompare(String(b.fecha || '9'))).slice(0, 3);
+  const jug = misPs.filter(p => p.estado === 'jugado').sort((a, b) => b.jornada - a.jornada);
+  const partidos = `<div class="card"><h2 style="margin-top:0">Próximos partidos</h2>${prox.length ? prox.map(p => filaPartido(p, eq)).join('') : '<p class="muted">No hay partidos programados.</p>'}
+    <h2>Resultados</h2>${jug.length ? jug.map(p => filaPartido(p, eq)).join('') : '<p class="muted">Todavía no hay resultados.</p>'}
+    ${yo ? `<p class="muted" style="font-size:13px">PJ ${yo.pj} · G ${yo.g} · E ${yo.e} · P ${yo.p} · GF ${yo.gf} · GC ${yo.gc} · Dif ${yo.dif}</p>` : ''}</div>`;
+  return cab + resumen + `<div class="cap-dos">${partidos}${goleadores}</div>` + jugadores + pagosEquipo
+    + `<p class="muted" style="font-size:13px;text-align:center">Para pagos o correcciones, acude con la mesa de control. Esta vista es solo de consulta.</p>`;
+}
+
 // ----- Panel de control: usuarios de la mesa de control -----
-const CARGOS = { Presidente: 'admin', Secretario: 'captura', 'Tesorero(a)': 'finanzas', Vocal: 'captura', Otro: 'captura' };
-const ROL_TXT = { admin: 'Administrador (todo)', finanzas: 'Finanzas (pagos, registro, fianzas, credenciales)', captura: 'Captura de resultados' };
+const CARGOS = { Presidente: 'admin', Secretario: 'captura', 'Tesorero(a)': 'finanzas', Vocal: 'captura', 'Capitán': 'capitan', Otro: 'captura' };
+const ROL_TXT = { admin: 'Administrador (todo)', finanzas: 'Finanzas (pagos, registro, fianzas, credenciales)', captura: 'Captura de resultados', capitan: 'Capitán (solo ve su equipo)' };
+const opEquipos = sel => D().torneos.map(t => `<optgroup label="${esc(t.nombre)}">${equiposDe(t.id).map(e => `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</optgroup>`).join('');
 
 function cargarUsuarios() {
   st.usuarios = { cargando: true, lista: [] };
@@ -726,7 +787,8 @@ function admUsuarios() {
   if (db.modo === 'demo') return `<div class="card vacio">El panel de control de usuarios funciona cuando la página está conectada a Supabase.</div>`;
   if (!st.usuarios) cargarUsuarios();
   const u = st.usuarios;
-  const orden = ['Presidente', 'Secretario', 'Tesorero(a)', 'Vocal'];
+  const nuevo = st.uNuevo || { cargo: 'Tesorero(a)' };
+  const orden = ['Presidente', 'Secretario', 'Tesorero(a)', 'Vocal', 'Otro', 'Capitán'];
   const lista = [...u.lista].sort((a, b) => ((orden.indexOf(a.cargo) + 1) || 9) - ((orden.indexOf(b.cargo) + 1) || 9) || String(a.nombre).localeCompare(String(b.nombre), 'es'));
   const opRol = sel => Object.entries(ROL_TXT).map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v}</option>`).join('');
   const opCargo = sel => Object.keys(CARGOS).map(k => `<option ${k === sel ? 'selected' : ''}>${k}</option>`).join('');
@@ -734,7 +796,8 @@ function admUsuarios() {
     const soyYo = x.user_id === u.yo;
     return `<tr><td class="izq"><b>${esc(x.nombre || '—')}</b>${soyYo ? ' <span class="badge">tú</span>' : ''}<br><span class="muted" style="font-size:13px">${esc(x.email)}</span></td>
       <td><select data-cambio="u-cargo" data-id="${x.user_id}">${opCargo(x.cargo)}</select></td>
-      <td><select data-cambio="u-rol" data-id="${x.user_id}" ${soyYo ? 'disabled' : ''}>${opRol(x.rol)}</select></td>
+      <td><select data-cambio="u-rol" data-id="${x.user_id}" ${soyYo ? 'disabled' : ''}>${opRol(x.rol)}</select>
+        ${x.rol === 'capitan' ? `<select data-cambio="u-equipo" data-id="${x.user_id}" style="margin-top:4px"><option value="">— Sin equipo —</option>${opEquipos(x.equipo_id)}</select>` : ''}</td>
       <td class="muted" style="font-size:13px">${x.ultimo_acceso ? fmtFecha(x.ultimo_acceso.slice(0, 10)) : 'Nunca'}</td>
       <td class="fila" style="flex-wrap:nowrap"><button class="btn sec chico" data-act="u-pass" data-id="${x.user_id}">Contraseña</button>
         ${soyYo ? '' : `<button class="btn peligro chico" data-act="u-quitar" data-id="${x.user_id}" data-nombre="${esc(x.nombre || x.email)}">Quitar acceso</button>`}</td></tr>
@@ -743,15 +806,16 @@ function admUsuarios() {
         <button class="btn chico" type="submit">Guardar contraseña</button><button class="btn sec chico" type="button" data-act="u-pass" data-id="">Cancelar</button></form></td></tr>` : ''}`;
   }).join('');
   return `<div class="card"><div class="fila entre"><h2 style="margin:0">Mesa de control</h2><button class="btn sec chico" data-act="u-recargar">Actualizar</button></div>
-      <p class="muted">Cada integrante entra en <b>Iniciar sesión</b> con su correo y contraseña, y solo ve lo que le toca según su rol.</p>
+      <p class="muted">Mesa de control y capitanes. Cada quien entra en <b>Iniciar sesión</b> con su correo y contraseña, y solo ve lo que le toca según su rol.</p>
       ${u.cargando ? '<p class="muted">Cargando usuarios…</p>' : u.error ? `<div class="card" style="border-color:#f5c518">${esc(u.error)}</div>`
       : `<div class="tabla-wrap"><table><thead><tr><th class="izq">Integrante</th><th>Cargo</th><th>Rol (qué puede hacer)</th><th>Último acceso</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>`}
     </div>
     <div class="card"><h2 style="margin-top:0">Dar de alta un usuario</h2>
       <form data-form="u-crear"><div class="form-grid">
-        <div class="campo"><label>Nombre</label><input name="nombre" required placeholder="Ej. Ana López"></div>
-        <div class="campo"><label>Cargo</label><select name="cargo" data-cambio="u-cargo-nuevo">${opCargo('Tesorero(a)')}</select></div>
-        <div class="campo"><label>Rol</label><select name="rol" id="u-rol-nuevo">${opRol('finanzas')}</select></div>
+        <div class="campo"><label>Nombre</label><input name="nombre" required placeholder="Ej. Ana López" value="${esc(nuevo.nombre || '')}"></div>
+        <div class="campo"><label>Cargo</label><select name="cargo" data-cambio="u-cargo-nuevo">${opCargo(nuevo.cargo)}</select></div>
+        <div class="campo"><label>Rol</label><select name="rol" id="u-rol-nuevo" data-cambio="u-rol-nuevo">${opRol(CARGOS[nuevo.cargo])}</select></div>
+        <div class="campo" id="u-equipo-campo" ${CARGOS[nuevo.cargo] === 'capitan' ? '' : 'hidden'}><label>Equipo del capitán</label><select name="equipo_id"><option value="">— Elige —</option>${opEquipos(nuevo.equipo)}</select></div>
         <div class="campo"><label>Correo</label><input name="email" type="email" required autocomplete="off"></div>
         <div class="campo"><label>Contraseña (mínimo 8)</label><input name="password" type="password" minlength="8" required autocomplete="new-password"></div>
       </div><button class="btn" type="submit">Dar de alta</button>
@@ -829,7 +893,7 @@ $app.addEventListener('click', ev => {
     }),
     capturar: () => { abrirCaptura(id); render(); },
     'cap-mas': () => { const v = (st.cap.c[id] ||= { gol: 0, amarilla: 0, roja: 0, azul: 0 }); const tp = b.dataset.tipo; if ((v[tp] || 0) < MAX_TIPO[tp]) v[tp] = (v[tp] || 0) + 1; render(); },
-    'cap-menos': () => { const v = st.cap.c[id]; const tp = b.dataset.tipo; if (v && v[tp] > 0) v[tp]--; render(); },
+    'cap-menos': () => { const v = st.cap.c[id]; const tp = b.dataset.tipo; const min = esPresidente() ? 0 : (st.cap.base[id]?.[tp] || 0); if (v && v[tp] > min) v[tp]--; render(); },
     'cap-manual': () => { const p = D().partidos.find(x => x.id === st.cap.id); const [gl, gv] = marcadorCaptura(p); st.cap.manual = b.checked; st.cap.gl = gl; st.cap.gv = gv; render(); },
     'cap-cancelar': () => { st.cap = null; render(); },
     'cap-guardar': () => seguro(guardarCaptura),
@@ -845,6 +909,10 @@ $app.addEventListener('click', ev => {
     reiniciar: () => confirm('¿Borrar todo lo capturado en este navegador?') && (reiniciarDemo(), st.torneoId = null, render()),
     salir: () => seguro(async () => { await salir(); toast('Sesión cerrada'); }),
     'u-recargar': () => { st.usuarios = null; render(); },
+    'usuario-capitan': () => {
+      const e = D().equipos.find(x => x.id === id);
+      st.uNuevo = { cargo: 'Capitán', equipo: id, nombre: e?.delegado || '' }; st.tabAdmin = 'usuarios'; render(); window.scrollTo?.(0, document.body.scrollHeight);
+    },
     'u-pass': () => { st.passDe = id || null; render(); },
     'u-quitar': () => confirm(`¿Quitarle el acceso a ${b.dataset.nombre}? Ya no podrá iniciar sesión. Lo puedes volver a dar de alta con el mismo correo.`) && seguro(async () => {
       await usuarios('quitar', { user_id: id }); st.usuarios = null; toast('Acceso quitado');
@@ -859,7 +927,14 @@ $app.addEventListener('change', ev => {
   if (!el) return;
   const c = el.dataset.cambio;
   if (c === 'torneo') { st.torneoId = el.value; st.jornadaAdmin = null; st.vistaPrevia = null; guardarPref(); render(); }
-  if (c === 'u-cargo-nuevo') { const r = document.getElementById('u-rol-nuevo'); if (r) r.value = CARGOS[el.value]; }
+  if (c === 'u-cargo-nuevo' || c === 'u-rol-nuevo') {
+    const r = document.getElementById('u-rol-nuevo'); if (r && c === 'u-cargo-nuevo') r.value = CARGOS[el.value];
+    const q = document.getElementById('u-equipo-campo'); if (q && r) q.hidden = r.value !== 'capitan';
+  }
+  if (c === 'u-equipo') seguro(async () => {
+    await usuarios('cambiar', { user_id: el.dataset.id, equipo_id: el.value });
+    const x = st.usuarios?.lista.find(y => y.user_id === el.dataset.id); if (x) x.equipo_id = el.value; toast('Equipo asignado');
+  });
   if (c === 'u-rol' || c === 'u-cargo') seguro(async () => {
     await usuarios('cambiar', { user_id: el.dataset.id, [c === 'u-rol' ? 'rol' : 'cargo']: el.value });
     const x = st.usuarios?.lista.find(y => y.user_id === el.dataset.id); if (x) x[c === 'u-rol' ? 'rol' : 'cargo'] = el.value;
@@ -886,8 +961,9 @@ $app.addEventListener('submit', ev => {
   const formularios = {
     login: () => seguro(async () => { await entrar(d.email, d.password); toast('Bienvenido'); }),
     'u-crear': () => seguro(async () => {
-      const r = await usuarios('crear', { nombre: d.nombre, cargo: d.cargo, rol: d.rol, email: d.email, password: d.password });
-      st.usuarios = null; toast(r.existente ? 'Ese correo ya existía: se le dieron los permisos (su contraseña no cambió)' : `${d.nombre} dado de alta`);
+      if (d.rol === 'capitan' && !d.equipo_id) throw new Error('Elige el equipo del capitán.');
+      const r = await usuarios('crear', { nombre: d.nombre, cargo: d.cargo, rol: d.rol, email: d.email, password: d.password, equipo_id: d.equipo_id });
+      st.usuarios = null; st.uNuevo = null; toast(r.existente ? 'Ese correo ya existía: se le dieron los permisos (su contraseña no cambió)' : `${d.nombre} dado de alta`);
     }),
     'u-pass': () => seguro(async () => { await usuarios('password', { user_id: f.dataset.id, password: d.password }); st.passDe = null; toast('Contraseña cambiada'); }),
     torneo: () => seguro(async () => {

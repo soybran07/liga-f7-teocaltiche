@@ -19,7 +19,7 @@ db.pendientes = leerJSON(COLA_KEY) || [];
 function guardarCache() {
   if (db.modo !== 'supabase') return;
   escribirJSON(CACHE_KEY, { guardado: new Date().toISOString(), user: db.user ? { id: db.user.id, email: db.user.email } : null,
-    rol: db.rol, faltaMigracion: db.faltaMigracion, data: db.data });
+    rol: db.rol, equipoId: db.equipoId, faltaMigracion: db.faltaMigracion, data: db.data });
 }
 const guardarCola = () => { escribirJSON(COLA_KEY, db.pendientes); avisarSync(); };
 const avisarSync = () => { try { db.alCambiarSync?.(); } catch { /* nada */ } };
@@ -97,7 +97,7 @@ function usarCache() {
   for (const t of TABLAS) db.data[t] ||= [];
   db.faltaMigracion = !!c.faltaMigracion;
   if (!db.user && c.user) db.user = c.user;
-  if (db.user && c.user && db.user.id === c.user.id) { db.rol = c.rol; db.esAdmin = !!c.rol; }
+  if (db.user && c.user && db.user.id === c.user.id) { db.rol = c.rol; db.equipoId = c.equipoId || null; db.esAdmin = !!c.rol; }
   db.offline = true; db.cacheDe = c.guardado;
   return true;
 }
@@ -159,7 +159,11 @@ if (typeof window !== 'undefined') {
 async function revisarAdmin() {
   const r = await db.client.rpc('mi_rol');
   if (r.error && esErrorDeRed(r.error)) throw new Error(r.error.message);
-  if (!r.error) { db.rol = r.data || null; db.faltaRoles = false; return !!db.rol; }
+  if (!r.error) {
+    db.rol = r.data || null; db.faltaRoles = false; db.equipoId = null;
+    if (db.rol === 'capitan') { const e = await db.client.rpc('mi_equipo'); db.equipoId = e.data || null; }
+    return !!db.rol;
+  }
   db.faltaRoles = true;
   const { data, error } = await db.client.rpc('es_admin');
   db.rol = !error && data === true ? 'admin' : null;

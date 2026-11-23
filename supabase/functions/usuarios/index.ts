@@ -10,7 +10,7 @@ const cors = {
 };
 const resp = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
-const ROLES = ['admin', 'finanzas', 'captura'];
+const ROLES = ['admin', 'finanzas', 'captura', 'capitan'];
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     const limpio = (v: unknown) => String(v ?? '').trim();
 
     if (b.accion === 'listar') {
-      const { data: filas, error } = await sb.from('admins').select('user_id, rol, nombre, cargo');
+      const { data: filas, error } = await sb.from('admins').select('user_id, rol, nombre, cargo, equipo_id');
       if (error) throw error;
       const { data: us, error: e2 } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 });
       if (e2) throw e2;
@@ -51,6 +51,8 @@ Deno.serve(async (req) => {
       const rol = limpio(b.rol);
       if (!/^\S+@\S+\.\S+$/.test(email)) return resp({ error: 'Correo no válido.' }, 400);
       if (!ROLES.includes(rol)) return resp({ error: 'Rol no válido.' }, 400);
+      const equipo_id = rol === 'capitan' ? limpio(b.equipo_id) : '';
+      if (rol === 'capitan' && !equipo_id) return resp({ error: 'Elige el equipo del capitán.' }, 400);
       let id = '';
       const { data: nuevo, error } = await sb.auth.admin.createUser({ email, password: String(b.password || ''), email_confirm: true });
       if (error) {
@@ -61,7 +63,7 @@ Deno.serve(async (req) => {
         id = ya.id;
         await sb.auth.admin.updateUserById(id, { ban_duration: 'none' });
       } else id = nuevo.user!.id;
-      const { error: e3 } = await sb.from('admins').upsert({ user_id: id, rol, nombre: limpio(b.nombre) || null, cargo: limpio(b.cargo) || null });
+      const { error: e3 } = await sb.from('admins').upsert({ user_id: id, rol, nombre: limpio(b.nombre) || null, cargo: limpio(b.cargo) || null, equipo_id: equipo_id || null });
       if (e3) throw e3;
       return resp({ ok: true, user_id: id, existente: !!error });
     }
@@ -75,7 +77,9 @@ Deno.serve(async (req) => {
         if (!ROLES.includes(b.rol)) return resp({ error: 'Rol no válido.' }, 400);
         if (id === yo && b.rol !== 'admin') return resp({ error: 'No puedes quitarte a ti mismo el rol de administrador.' }, 400);
         cambios.rol = b.rol;
+        if (b.rol !== 'capitan') cambios.equipo_id = null;
       }
+      if (b.equipo_id !== undefined) cambios.equipo_id = limpio(b.equipo_id) || null;
       if (b.nombre !== undefined) cambios.nombre = limpio(b.nombre) || null;
       if (b.cargo !== undefined) cambios.cargo = limpio(b.cargo) || null;
       const { error } = await sb.from('admins').update(cambios).eq('user_id', id);
