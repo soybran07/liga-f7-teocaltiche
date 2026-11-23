@@ -251,15 +251,39 @@ function pubDisciplina(t) {
   </tbody></table></div><p class="muted" style="font-size:13px">Multas: amarilla $${t.multa_amarilla} · roja $${t.multa_roja} · azul $${t.multa_azul}.</p>`;
 }
 
+// Estadísticas generales por equipo (sin nombres de jugadores).
 function pubEquipos(t) {
   const eqs = equiposDe(t.id);
   if (!eqs.length) return `<div class="card vacio">Aún no hay equipos.</div>`;
-  return `<div class="grid">${eqs.map(e => {
-    const js = jugadoresDe(e.id).filter(j => j.activo !== false);
-    return `<div class="card"><div class="fila entre"><strong>${esc(e.nombre)}</strong>${e.grupo ? `<span class="badge">Grupo ${esc(e.grupo)}</span>` : ''}</div>
-      <div class="muted" style="font-size:13px;margin:4px 0 8px">${js.length} jugador${js.length === 1 ? '' : 'es'}</div>
-      <ol style="margin:0;padding-left:0;list-style:none">${js.map(j => `<li><span class="muted" style="display:inline-block;width:28px">${j.numero ?? ''}</span>${esc(j.nombre)}</li>`).join('')}</ol></div>`;
-  }).join('')}</div>`;
+  const ps = partidosDe(t.id).filter(p => p.estado !== 'borrador');
+  const tabla = tablaPosiciones(t, eqs, ps);
+  const ids = new Set(eqs.map(e => e.id));
+  const tj = new Map(eqs.map(e => [e.id, { amarilla: 0, roja: 0, azul: 0 }]));
+  D().eventos.forEach(ev => { if (ev.tipo !== 'gol' && ids.has(ev.equipo_id)) tj.get(ev.equipo_id)[ev.tipo]++; });
+  const filas = tabla.map((f, i) => ({ ...f, lugar: i + 1, tj: tj.get(f.equipo.id),
+    prom: f.pj ? f.gf / f.pj : 0, promC: f.pj ? f.gc / f.pj : 0,
+    puntosFP: (() => { const x = tj.get(f.equipo.id); return x.amarilla + x.roja * 3 + x.azul; })() }));
+  const jugaron = filas.filter(f => f.pj);
+  if (!jugaron.length) return `<div class="card vacio">Las estadísticas aparecen cuando se juegue el primer partido.</div>`;
+  const mejor = (arr, fn, dir = -1) => [...arr].sort((a, b) => dir * (fn(a) - fn(b)) || a.lugar - b.lugar)[0];
+  const n1 = v => (Math.round(v * 10) / 10).toLocaleString('es-MX');
+  const dest = [
+    ['⚽', 'Mejor ofensiva', mejor(jugaron, f => f.gf), f => `${f.gf} goles a favor`],
+    ['🛡️', 'Mejor defensa', mejor(jugaron, f => f.gc, 1), f => `${f.gc} goles en contra`],
+    ['📈', 'Más goles por partido', mejor(jugaron, f => f.prom), f => `${n1(f.prom)} por partido`],
+    ['🤝', 'Juego limpio', mejor(jugaron, f => f.puntosFP, 1), f => `${f.tj.amarilla + f.tj.roja + f.tj.azul} tarjetas`],
+  ];
+  const destacados = `<div class="grid est-dest">${dest.map(([ic, txt, f, det]) => `<div class="card est-card"><div class="est-ic">${ic}</div>
+    <div class="muted" style="font-size:13px">${txt}</div><div class="est-eq">${esc(f.equipo.nombre)}</div><div class="muted" style="font-size:13px">${det(f)}</div></div>`).join('')}</div>`;
+  const ofe = [...jugaron].sort((a, b) => b.gf - a.gf || a.lugar - b.lugar);
+  const def = [...jugaron].sort((a, b) => a.gc - b.gc || a.lugar - b.lugar);
+  const rank = (titulo, arr, col, val) => `<div class="card"><h3 style="margin-top:0">${titulo}</h3><table><thead><tr><th>#</th><th class="izq">Equipo</th><th>PJ</th><th>${col}</th><th>Prom.</th></tr></thead><tbody>
+    ${arr.map((f, i) => `<tr><td>${i + 1}</td><td class="izq">${esc(f.equipo.nombre)}</td><td>${f.pj}</td><td><b>${val(f)}</b></td><td>${n1(col === 'GF' ? f.prom : f.promC)}</td></tr>`).join('')}</tbody></table></div>`;
+  const general = `<div class="card"><h3 style="margin-top:0">Estadísticas generales</h3><div class="tabla-wrap"><table><thead><tr><th>#</th><th class="izq">Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>GC</th><th>Dif</th>
+    <th><span class="tarjeta amarilla"></span></th><th><span class="tarjeta roja"></span></th><th><span class="tarjeta azul"></span></th><th>% victorias</th></tr></thead><tbody>
+    ${filas.map(f => `<tr><td>${f.lugar}</td><td class="izq">${esc(f.equipo.nombre)}</td><td>${f.pj}</td><td>${f.g}</td><td>${f.e}</td><td>${f.p}</td><td>${f.gf}</td><td>${f.gc}</td><td>${f.dif > 0 ? '+' : ''}${f.dif}</td>
+      <td>${f.tj.amarilla}</td><td>${f.tj.roja}</td><td>${f.tj.azul}</td><td>${f.pj ? Math.round(f.g / f.pj * 100) + '%' : '—'}</td></tr>`).join('')}</tbody></table></div></div>`;
+  return destacados + `<div class="cap-dos est-dos">${rank('Mejor ataque', ofe, 'GF', f => f.gf)}${rank('Mejor defensa', def, 'GC', f => f.gc)}</div>` + general;
 }
 
 // ================= VISTA ADMIN =================
@@ -273,21 +297,28 @@ function vistaAdmin() {
       <div class="campo"><label>Contraseña</label><input name="password" type="password" required autocomplete="current-password"></div>
       <button class="btn" type="submit">Entrar</button></form></div>`;
   }
-  if (db.rol === 'capitan') return vistaCapitan();
+  if (db.rol === 'capitan') {
+    const e = D().equipos.find(x => x.id === db.equipoId);
+    const tc = e && D().torneos.find(x => x.id === e.torneo_id);
+    if (!['miequipo', 'adeudos'].includes(st.tabAdmin)) st.tabAdmin = 'miequipo';
+    const pest = tc ? tabs([['miequipo', 'Mi equipo'], ['adeudos', 'Adeudos de la liga']], st.tabAdmin, 'tabAdmin') : '';
+    return st.tabAdmin === 'adeudos' && tc ? `<div class="fila entre"><h1>Adeudos de la liga <span class="badge">Capitán</span></h1></div>${pest}${admAdeudos(tc)}`
+      : vistaCapitan(pest);
+  }
   const t = torneo();
   const ROLES = { admin: 'Administrador', finanzas: 'Finanzas', captura: 'Captura de resultados' };
   const cab = `<div class="fila entre"><h1>Administrar${t ? ': ' + esc(t.nombre) : ''} <span class="badge">${ROLES[db.rol] || ''}</span></h1><div class="fila">${selectorTorneo()}
 </div></div>`;
   const porRol = {
-    admin: t ? [['resultados', 'Capturar juegos'], ['equipos', 'Equipos y jugadores'], ['generar', 'Generar jornadas'], ['torneos', 'Torneos'], ['usuarios', 'Panel de control'], ['respaldo', 'Respaldo']]
+    admin: t ? [['resultados', 'Capturar juegos'], ['equipos', 'Equipos y jugadores'], ['adeudos', 'Adeudos'], ['generar', 'Generar jornadas'], ['torneos', 'Torneos'], ['usuarios', 'Panel de control'], ['respaldo', 'Respaldo']]
       : [['torneos', 'Torneos'], ['usuarios', 'Panel de control'], ['respaldo', 'Respaldo']],
-    captura: t ? [['resultados', 'Capturar juegos']] : [],
-    finanzas: t ? [['equipos', 'Equipos y jugadores']] : [],
+    captura: t ? [['resultados', 'Capturar juegos'], ['adeudos', 'Adeudos']] : [],
+    finanzas: t ? [['equipos', 'Equipos y jugadores'], ['adeudos', 'Adeudos']] : [],
   };
   const lista = porRol[db.rol] || [];
   if (!lista.length) return cab + `<div class="card vacio">Todavía no hay torneos.</div>`;
   if (!lista.some(([id]) => id === st.tabAdmin)) st.tabAdmin = lista[0][0];
-  const cuerpo = { resultados: admResultados, equipos: admEquipos, generar: admGenerar, torneos: admTorneos, usuarios: admUsuarios, respaldo: admRespaldo }[st.tabAdmin](t);
+  const cuerpo = { resultados: admResultados, equipos: admEquipos, generar: admGenerar, torneos: admTorneos, usuarios: admUsuarios, adeudos: admAdeudos, respaldo: admRespaldo }[st.tabAdmin](t);
   const avisoRoles = db.faltaRoles && db.rol === 'admin' ? `<div class="card" style="border-color:#f5c518"><b>Falta un paso en Supabase:</b> para los usuarios de finanzas y captura, y las jornadas en borrador, corre <code>supabase/migracion-003-roles-borrador.sql</code>.</div>` : '';
   const aviso = avisoRoles + (db.faltaMigracion ? `<div class="card" style="border-color:#f5c518"><b>Falta un paso en Supabase:</b> para usar credenciales, pagos y suspensiones corre una vez el archivo <code>supabase/migracion-002-credenciales.sql</code> en Supabase &gt; SQL Editor.</div>` : '');
   return cab + aviso + tabs(lista, st.tabAdmin, 'tabAdmin') + cuerpo;
@@ -738,9 +769,9 @@ async function guardarCaptura() {
 }
 
 // ----- Panel del capitán: todo sobre su equipo (solo lectura) -----
-function vistaCapitan() {
+function vistaCapitan(pest = '') {
   const e = D().equipos.find(x => x.id === db.equipoId);
-  const cab = `<div class="fila entre"><h1>Mi equipo${e ? ': ' + esc(e.nombre) : ''} <span class="badge">Capitán</span></h1></div>`;
+  const cab = `<div class="fila entre"><h1>Mi equipo${e ? ': ' + esc(e.nombre) : ''} <span class="badge">Capitán</span></h1></div>${pest}`;
   if (!e) return cab + `<div class="card vacio">Tu usuario todavía no tiene un equipo asignado. Pídele al presidente que te lo asigne en el Panel de control.</div>`;
   const t = D().torneos.find(x => x.id === e.torneo_id);
   const eqs = equiposDe(t.id), eq = mapa(eqs);
@@ -790,6 +821,46 @@ function vistaCapitan() {
     ${yo ? `<p class="muted" style="font-size:13px">PJ ${yo.pj} · G ${yo.g} · E ${yo.e} · P ${yo.p} · GF ${yo.gf} · GC ${yo.gc} · Dif ${yo.dif}</p>` : ''}</div>`;
   return cab + resumen + `<div class="cap-dos">${partidos}${goleadores}</div>` + jugadores + pagosEquipo
     + `<p class="muted" style="font-size:13px;text-align:center">Para pagos o correcciones, acude con la mesa de control. Esta vista es solo de consulta.</p>`;
+}
+
+// ----- Adeudos de toda la liga (solo consulta para mesa de control y capitanes) -----
+function admAdeudos(t) {
+  const eqs = equiposDe(t.id);
+  const CONC = { registro: 'Registro', inscripcion: 'Inscripción', arbitraje: 'Arbitraje', multa: 'Multa', fianza: 'Fianza', otro: 'Otro' };
+  const cuota = Number(t.cuota_registro ?? 50);
+  const $ = n => '$' + Number(n).toLocaleString('es-MX');
+  const filtro = st.adeudoEq || '';
+  const renglones = [];
+  for (const e of eqs) {
+    if (filtro && e.id !== filtro) continue;
+    D().pagos.filter(g => g.equipo_id === e.id && !g.jugador_id && !g.pagado)
+      .forEach(g => renglones.push({ e, quien: 'Equipo', concepto: CONC[g.concepto] || g.concepto, det: g.notas || '', monto: Number(g.monto), fecha: g.fecha, tipo: g.concepto }));
+    for (const j of jugadoresDe(e.id).filter(x => x.activo !== false)) {
+      const ep = estadoPagos(j);
+      ep.pendientes.forEach(g => renglones.push({ e, quien: j.nombre, num: j.numero, concepto: CONC[g.concepto] || g.concepto,
+        det: g.concepto === 'multa' ? (g.notas || '') : (g.notas || ''), monto: Number(g.monto), fecha: g.fecha, tipo: g.concepto }));
+      if (!ep.registro && !ep.pendientes.some(g => g.concepto === 'registro'))
+        renglones.push({ e, quien: j.nombre, num: j.numero, concepto: 'Registro', det: 'sin pagar', monto: cuota, fecha: '', tipo: 'registro' });
+    }
+  }
+  const total = renglones.reduce((a, r) => a + r.monto, 0);
+  const porTipo = {};
+  renglones.forEach(r => { const k = r.tipo === 'multa' ? (/(amarilla|roja|azul)/i.exec(r.det)?.[1]?.toLowerCase() ? 'Multa ' + /(amarilla|roja|azul)/i.exec(r.det)[1].toLowerCase() : 'Multa') : r.concepto; porTipo[k] = (porTipo[k] || 0) + r.monto; });
+  const porEq = eqs.map(e => ({ e, m: renglones.filter(r => r.e.id === e.id).reduce((a, r) => a + r.monto, 0) })).filter(x => x.m);
+  const resumen = `<div class="card"><div class="fila entre"><h2 style="margin:0">Adeudos ${filtro ? 'de ' + esc(eqs.find(e => e.id === filtro)?.nombre) : 'de toda la liga'}: ${$(total)}</h2>
+      <select data-cambio="adeudo-eq" style="max-width:260px"><option value="">Todos los equipos</option>${eqs.map(e => `<option value="${e.id}" ${e.id === filtro ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select></div>
+    <div class="fila" style="gap:16px;margin-top:8px;font-size:14px">${Object.entries(porTipo).map(([k, v]) => `<span>${esc(k)}: <b>${$(v)}</b></span>`).join('') || '<span class="muted">Nadie debe nada.</span>'}</div>
+    ${!filtro && porEq.length ? `<div class="fila muted" style="gap:16px;margin-top:6px;font-size:13px">${porEq.sort((a, b) => b.m - a.m).map(x => `<span>${esc(x.e.nombre)}: <b>${$(x.m)}</b></span>`).join('')}</div>` : ''}
+    <p class="muted" style="font-size:13px;margin:8px 0 0">Solo consulta. Los pagos los registra tesorería.</p></div>`;
+  if (!renglones.length) return resumen;
+  const grupos = eqs.filter(e => renglones.some(r => r.e.id === e.id));
+  return resumen + grupos.map(e => {
+    const rs = renglones.filter(r => r.e.id === e.id).sort((a, b) => (a.quien === 'Equipo' ? -1 : 0) - (b.quien === 'Equipo' ? -1 : 0) || (a.num ?? 999) - (b.num ?? 999) || a.quien.localeCompare(b.quien, 'es'));
+    return `<div class="card"><div class="fila entre"><h3 class="eq-titulo" style="font-size:20px">${esc(e.nombre)}</h3><b>${$(rs.reduce((a, r) => a + r.monto, 0))}</b></div>
+      <div class="tabla-wrap"><table><thead><tr><th class="izq">Quién</th><th class="izq">Concepto</th><th class="izq">Detalle</th><th>Monto</th><th>Desde</th></tr></thead><tbody>
+      ${rs.map(r => `<tr><td class="izq">${r.num != null ? `<span class="muted">${r.num}</span> ` : ''}${r.quien === 'Equipo' ? '<b>Equipo</b>' : esc(r.quien)}</td><td class="izq">${esc(r.concepto)}</td>
+        <td class="izq muted">${esc(r.det)}</td><td><b style="color:#ffd166">${$(r.monto)}</b></td><td>${r.fecha ? fmtFecha(r.fecha) : '—'}</td></tr>`).join('')}</tbody></table></div></div>`;
+  }).join('');
 }
 
 // ----- Panel de control: usuarios de la mesa de control -----
@@ -974,6 +1045,7 @@ $app.addEventListener('change', ev => {
     const x = st.usuarios?.lista.find(y => y.user_id === el.dataset.id); if (x) x[c === 'u-rol' ? 'rol' : 'cargo'] = el.value;
     toast('Guardado');
   });
+  if (c === 'adeudo-eq') { st.adeudoEq = el.value; render(); }
   if (c === 'jornada') { st.jornadaAdmin = Number(el.value); st.abierto = null; render(); }
   if (c === 'b-fecha' || c === 'b-hora') seguro(() => actualizar('partidos', el.dataset.id, { [c === 'b-fecha' ? 'fecha' : 'hora']: el.value }));
   if (c === 'cap-gl') st.cap.gl = Number(el.value) || 0;

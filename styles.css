@@ -433,3 +433,13 @@ a { color: var(--verde); }
 .eq-info { white-space: nowrap; font-size: 14px; }
 .eq-flecha { display: inline-block; margin-left: 6px; font-size: 12px; }
 .eq-card:not(.abierto) { padding-bottom: 8px; }
+
+/* ---------- Estadísticas públicas de equipos ---------- */
+.est-dest { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 860px) { .est-dest { grid-template-columns: repeat(2, 1fr); } }
+.est-card { text-align: center; }
+.est-ic { font-size: 26px; }
+.est-eq { font-family: var(--titulo); font-size: 18px; margin: 2px 0; line-height: 1.15; }
+.est-dos { grid-template-columns: 1fr 1fr; margin-bottom: 12px; }
+.est-dos table td, .est-dos table th { padding-left: 4px; padding-right: 4px; }
+@media (max-width: 760px) { .est-dos { grid-template-columns: 1fr; } }
