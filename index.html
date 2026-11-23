@@ -10,27 +10,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261123">
 </head>
 <body>
-  <div id="carga" class="carga" role="status" aria-label="Cargando">
-    <div class="carga-cancha">
-      <div class="carga-balon"><svg viewBox="-50 -50 100 100" width="100%" height="100%" aria-hidden="true">
-          <defs><radialGradient id="bsh" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#fff"/><stop offset=".65" stop-color="#e9eef0"/><stop offset="1" stop-color="#9aa4aa"/></radialGradient>
-          <clipPath id="bclip"><circle r="48"/></clipPath></defs>
-          <circle r="48" fill="url(#bsh)"/>
-          <g clip-path="url(#bclip)" fill="#111" stroke="#111" stroke-width="2" stroke-linejoin="round">
-            <polygon points="0,-16 15.2,-4.9 9.4,12.9 -9.4,12.9 -15.2,-4.9"/>
-            <g id="bp"><polygon points="0,-36 12,-45 8,-58 -8,-58 -12,-45"/><line x1="0" y1="-16" x2="0" y2="-36"/></g>
-            <use href="#bp" transform="rotate(72)"/><use href="#bp" transform="rotate(144)"/><use href="#bp" transform="rotate(216)"/><use href="#bp" transform="rotate(288)"/>
-          </g>
-          <circle r="48" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="1.5"/>
-        </svg></div>
-      <div class="carga-sombra"></div>
-    </div>
-    <div class="carga-texto">Liga Fútbol 7</div>
-    <div class="carga-sub">Cargando<span>.</span><span>.</span><span>.</span></div>
-  </div>
   <header class="topbar">
     <a href="#/" class="marca" data-nav="inicio"><span class="marca-logos"><img src="img/logo-varonil.png" alt=""><img src="img/logo-femenil.png" alt=""></span><span id="nombre-liga">Liga Fútbol 7 Teocaltiche</span></a>
     <nav class="topnav">
@@ -43,15 +25,6 @@
   <main id="app" class="contenedor"><p class="muted">Cargando…</p></main>
   <footer class="pie contenedor muted">Dirección de Ligas Juveniles · Liga Fútbol 7 · Teocaltiche, Jalisco</footer>
   <div id="toast" class="toast" hidden></div>
-  <script>
-    // Quita la pantalla de carga cuando la página ya tiene sus datos (o a los 10 s como máximo).
-    (function () {
-      var c = document.getElementById('carga');
-      function fuera() { if (!c) return; c.classList.add('carga-fuera'); setTimeout(function () { c && c.remove(); c = null; }, 450); }
-      window.addEventListener('f7:listo', fuera);
-      setTimeout(fuera, 10000);
-    })();
-  </script>
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=20261123"></script>
 </body>
 </html>
