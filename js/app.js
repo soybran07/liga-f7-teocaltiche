@@ -111,8 +111,8 @@ function render() {
   $app.innerHTML = r === 'admin' ? vistaAdmin() : r === 'inicio' ? vistaInicio() : vistaPublica();
 }
 
-function selectorTorneo() {
-  const ts = torneosDe(st.rama);
+function selectorTorneo(rama = st.rama) {
+  const ts = torneosDe(rama);
   if (ts.length < 2) return '';
   return `<select data-cambio="torneo" style="max-width:320px">${ts.map(t =>
     `<option value="${t.id}" ${t.id === st.torneoId ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select>`;
@@ -306,8 +306,14 @@ function vistaAdmin() {
       : vistaCapitan(pest);
   }
   const t = torneo();
+  const ramaA = t ? ramaDe(t) : 'varonil';
+  document.body.dataset.tema = t ? ramaA : 'admin';
   const ROLES = { admin: 'Administrador', finanzas: 'Finanzas', captura: 'Captura de resultados' };
-  const cab = `<div class="fila entre"><h1>Administrar${t ? ': ' + esc(t.nombre) : ''} <span class="badge">${ROLES[db.rol] || ''}</span></h1><div class="fila">${selectorTorneo()}
+  const hayFem = torneosDe('femenil').length, hayVar = torneosDe('varonil').length;
+  const pildora = (r, txt, hay) => hay ? `<button class="liga-pill ${r}${ramaA === r ? ' activo' : ''}" data-act="rama-admin" data-id="${r}">${txt}</button>`
+    : (db.rol === 'admin' ? `<button class="liga-pill ${r} nueva" data-act="crear-liga" data-id="${r}">＋ Crear ${txt}</button>` : '');
+  const ligas = `<div class="ligas-admin">${pildora('varonil', 'Liga Juvenil Varonil', hayVar)}${pildora('femenil', 'Liga Juvenil Femenil', hayFem)}</div>`;
+  const cab = ligas + `<div class="fila entre"><h1>Administrar${t ? ': ' + esc(t.nombre) : ''} <span class="badge">${ROLES[db.rol] || ''}</span></h1><div class="fila">${selectorTorneo(ramaA)}
 </div></div>`;
   const porRol = {
     admin: t ? [['resultados', 'Capturar juegos'], ['equipos', 'Equipos y jugadores'], ['adeudos', 'Adeudos'], ['generar', 'Generar jornadas'], ['torneos', 'Torneos'], ['usuarios', 'Panel de control'], ['respaldo', 'Respaldo']]
@@ -774,6 +780,8 @@ function vistaCapitan(pest = '') {
   const cab = `<div class="fila entre"><h1>Mi equipo${e ? ': ' + esc(e.nombre) : ''} <span class="badge">Capitán</span></h1></div>${pest}`;
   if (!e) return cab + `<div class="card vacio">Tu usuario todavía no tiene un equipo asignado. Pídele al presidente que te lo asigne en el Panel de control.</div>`;
   const t = D().torneos.find(x => x.id === e.torneo_id);
+  document.body.dataset.tema = ramaDe(t);
+  const fem = ramaDe(t) === 'femenil';
   const eqs = equiposDe(t.id), eq = mapa(eqs);
   const ps = partidosDe(t.id).filter(p => p.estado !== 'borrador');
   const tabla = tablaPosiciones(t, eqs, ps);
@@ -807,7 +815,17 @@ function vistaCapitan(pest = '') {
       <td>${x.tj.gol}</td><td>${x.tj.amarilla}</td><td>${x.tj.roja}</td><td>${x.tj.azul}</td>
       <td class="izq" style="font-size:13px">${x.pj.ok ? '<b style="color:#3fe39b">Sí</b>' : `<b style="color:#ffb3b3">No</b> <span class="muted">${esc(x.pj.motivos.join(', '))}</span>`}</td></tr>`;
   }).join('');
-  const jugadores = `<div class="card"><h2 style="margin-top:0">Jugadores</h2>
+  const alta = `<div class="card"><h2 style="margin-top:0">Dar de alta ${fem ? 'jugadoras' : 'jugadores'}</h2>
+    <p class="muted" style="margin-top:0;font-size:13px">Registra a cada ${fem ? 'jugadora' : 'jugador'} con su fecha de nacimiento o CURP (la liga es de 11 a 17 años y solo puede haber ${fem ? 'una' : 'uno'} de 17 en la cancha).
+      Una vez dado de alta ya no se puede borrar ni cambiar desde aquí; si hay un error, avísale a la mesa de control. Para poder jugar falta pagar el registro con tesorería.</p>
+    <form data-form="jugador" data-equipo="${e.id}"><div class="form-grid">
+      <div class="campo"><label>Nombre completo</label><input name="nombre" required></div>
+      <div class="campo"><label>Número de playera</label><input name="numero" type="number" min="0"></div>
+      <div class="campo"><label>Fecha de nacimiento</label><input name="fecha_nac" type="date" required></div>
+      <div class="campo"><label>CURP (opcional)</label><input name="curp" maxlength="18" style="text-transform:uppercase"></div>
+    </div><div class="fila"><button class="btn" type="submit">Dar de alta</button><button class="btn sec" type="button" data-act="cancelar-form">Cancelar</button></div></form>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">La fecha de nacimiento y la CURP son privadas: solo las ve la mesa de control y tú.</p></div>`;
+  const jugadores = `<div class="card"><h2 style="margin-top:0">${fem ? 'Jugadoras' : 'Jugadores'}</h2>
     <p class="muted" style="margin-top:0;font-size:13px">Para jugar se necesita el registro pagado y no deber multas de amarilla o roja. Las azules no impiden jugar.</p>
     ${filas ? `<div class="tabla-wrap"><table><thead><tr><th>#</th><th class="izq">Jugador</th><th>Registro</th><th class="izq">Debe</th><th>⚽</th><th><span class="tarjeta amarilla"></span></th><th><span class="tarjeta roja"></span></th><th><span class="tarjeta azul"></span></th><th class="izq">¿Puede jugar?</th></tr></thead><tbody>${filas}</tbody></table></div>` : '<p class="muted">Sin jugadores registrados.</p>'}</div>`;
   const goleo = info.filter(x => x.tj.gol).sort((a, b) => b.tj.gol - a.tj.gol).slice(0, 10);
@@ -819,7 +837,7 @@ function vistaCapitan(pest = '') {
   const partidos = `<div class="card"><h2 style="margin-top:0">Próximos partidos</h2>${prox.length ? prox.map(p => filaPartido(p, eq)).join('') : '<p class="muted">No hay partidos programados.</p>'}
     <h2>Resultados</h2>${jug.length ? jug.map(p => filaPartido(p, eq)).join('') : '<p class="muted">Todavía no hay resultados.</p>'}
     ${yo ? `<p class="muted" style="font-size:13px">PJ ${yo.pj} · G ${yo.g} · E ${yo.e} · P ${yo.p} · GF ${yo.gf} · GC ${yo.gc} · Dif ${yo.dif}</p>` : ''}</div>`;
-  return cab + resumen + `<div class="cap-dos">${partidos}${goleadores}</div>` + jugadores + pagosEquipo
+  return cab + resumen + `<div class="cap-dos">${partidos}${goleadores}</div>` + alta + jugadores + pagosEquipo
     + `<p class="muted" style="font-size:13px;text-align:center">Para pagos o correcciones, acude con la mesa de control. Esta vista es solo de consulta.</p>`;
 }
 
@@ -1003,6 +1021,17 @@ $app.addEventListener('click', ev => {
     reiniciar: () => confirm('¿Borrar todo lo capturado en este navegador?') && (reiniciarDemo(), st.torneoId = null, render()),
     salir: () => seguro(async () => { await salir(); toast('Sesión cerrada'); }),
     'u-recargar': () => { st.usuarios = null; render(); },
+    'rama-admin': () => { const ts = torneosDe(id); if (ts.length) { st.torneoId = (ts.find(x => x.activo !== false) || ts[0]).id; st.jornadaAdmin = null; st.cap = null; st.equipoAbierto = null; guardarPref(); } render(); },
+    'crear-liga': () => confirm(`¿Crear la ${id === 'femenil' ? 'Liga Juvenil Femenil' : 'Liga Juvenil Varonil'} – Apertura 2026? Después le agregas equipos.`) && seguro(async () => {
+      const base = D().torneos[0] || {};
+      const fem = id === 'femenil';
+      const [n] = await insertar('torneos', {
+        nombre: `Liga Juvenil ${fem ? 'Femenil' : 'Varonil'} – Apertura 2026`, categoria: `Juvenil ${fem ? 'Femenil ' : ''}11 a 17 años`,
+        temporada: base.temporada || '2026-2027', sede: base.sede || '', pts_victoria: base.pts_victoria ?? 3, pts_empate: base.pts_empate ?? 1,
+        multa_amarilla: base.multa_amarilla ?? 30, multa_roja: base.multa_roja ?? 50, multa_azul: base.multa_azul ?? 10,
+        ...(db.faltaMigracion ? {} : { cuota_registro: base.cuota_registro ?? 50 }), activo: true });
+      st.torneoId = n.id; guardarPref(); st.tabAdmin = 'equipos'; toast(`${n.nombre} creada. Ahora agrega sus equipos.`);
+    }),
     'cancelar-form': () => {
       const f = b.closest('form'); if (!f) return;
       const tipo = f.dataset.form;
@@ -1091,8 +1120,11 @@ $app.addEventListener('submit', ev => {
     jugador: () => seguro(async () => {
       const [j] = await insertar('jugadores', { equipo_id: f.dataset.equipo, nombre: d.nombre.trim(), numero: numONull(d.numero), activo: true });
       const curp = (d.curp || '').trim().toUpperCase();
-      await guardarPrivado(j.id, { curp, fecha_nac: d.fecha_nac || fechaDeCurp(curp) || '' });
-      toast('Jugador agregado');
+      const priv = { curp, fecha_nac: d.fecha_nac || fechaDeCurp(curp) || '' };
+      await guardarPrivado(j.id, priv);
+      const tj = D().torneos.find(x => x.id === D().equipos.find(e => e.id === j.equipo_id)?.torneo_id);
+      const av = revisarJugador(priv, tj?.categoria || '');
+      toast(`${j.nombre} quedó registrado(a)${av.length ? ' · Revisa: ' + av.join(', ') : ''}`, !!av.length);
     }),
     'jugador-editar': () => seguro(async () => {
       const id = f.dataset.id;

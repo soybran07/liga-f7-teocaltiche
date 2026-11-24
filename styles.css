@@ -48,11 +48,11 @@ a { color: var(--verde); }
   color: #fff; text-decoration: none; padding: 7px 14px; border-radius: 999px; font-weight: 600; font-size: 14px;
   border: 1px solid rgba(255,255,255,.35); transition: background .2s, border-color .2s, color .2s;
 }
-.topnav a.nav-varonil:hover, body[data-tema=varonil] .topnav a.nav-varonil { background: var(--c-varonil); border-color: #fff; }
-.topnav a.nav-femenil:hover, body[data-tema=femenil] .topnav a.nav-femenil { background: var(--c-femenil); border-color: #fff; }
+.topnav a.nav-varonil:hover, .topnav a.nav-varonil.activo { background: var(--c-varonil); border-color: #fff; }
+.topnav a.nav-femenil:hover, .topnav a.nav-femenil.activo { background: var(--c-femenil); border-color: #fff; }
 .topnav a.nav-admin { border-color: transparent; opacity: .85; }
 .topnav a.nav-admin:hover, .topnav a.nav-admin.activo { background: rgba(255,255,255,.15); opacity: 1; }
-body[data-tema=varonil] .topnav a.nav-varonil, body[data-tema=femenil] .topnav a.nav-femenil { box-shadow: 0 0 0 2px rgba(255,255,255,.4); }
+.topnav a.nav-varonil.activo, .topnav a.nav-femenil.activo { box-shadow: 0 0 0 2px rgba(255,255,255,.4); }
 .aviso { background: #fff4d6; color: #5c4400; padding: 8px 16px; font-size: 14px; text-align: center; }
 
 .fila { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -443,3 +443,12 @@ a { color: var(--verde); }
 .est-dos { grid-template-columns: 1fr 1fr; margin-bottom: 12px; }
 .est-dos table td, .est-dos table th { padding-left: 4px; padding-right: 4px; }
 @media (max-width: 760px) { .est-dos { grid-template-columns: 1fr; } }
+
+/* ---------- Selector de liga en el panel ---------- */
+.ligas-admin { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 10px; }
+.liga-pill { font: inherit; font-weight: 700; font-size: 15px; color: #fff; cursor: pointer; padding: 9px 18px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.1); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.liga-pill.varonil:hover, .liga-pill.varonil.activo { background: var(--c-varonil); border-color: #fff; }
+.liga-pill.femenil:hover, .liga-pill.femenil.activo { background: var(--c-femenil); border-color: #fff; }
+.liga-pill.activo { box-shadow: 0 0 0 2px rgba(255,255,255,.4); }
+.liga-pill.nueva { border-style: dashed; }
